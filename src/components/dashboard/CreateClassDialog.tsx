@@ -78,12 +78,28 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
   const [loading, setLoading] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
   const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
+  const [teacherGradeLevelIds, setTeacherGradeLevelIds] = useState<string[]>([]);
   const { user, profile, isAdmin, isTeacher } = useAuth();
   const extendedProfile = profile as ExtendedProfile | null;
 
   useEffect(() => {
     fetchOptions();
   }, []);
+
+  useEffect(() => {
+    if (user && isTeacher && !isAdmin) {
+      fetchTeacherGradeLevels();
+    }
+  }, [user, isTeacher, isAdmin]);
+
+  const fetchTeacherGradeLevels = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('teacher_grade_levels')
+      .select('grade_level_id')
+      .eq('teacher_id', user.id);
+    setTeacherGradeLevelIds(data?.map(d => d.grade_level_id) || []);
+  };
 
   const fetchOptions = async () => {
     const [schoolsRes, gradesRes] = await Promise.all([
@@ -191,6 +207,13 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
   };
 
   const sortedGradeLevels = [...gradeLevels].sort((a, b) => a.order_index - b.order_index);
+  
+  // For teachers, filter to only their assigned grade levels
+  const availableGradeLevels = isAdmin
+    ? sortedGradeLevels
+    : sortedGradeLevels.filter(g => teacherGradeLevelIds.includes(g.id));
+
+  const hasNoAssignedGrades = isTeacher && !isAdmin && teacherGradeLevelIds.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -274,13 +297,18 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="none">No grade</SelectItem>
-                        {sortedGradeLevels.map((grade) => (
+                        {availableGradeLevels.map((grade) => (
                           <SelectItem key={grade.id} value={grade.id}>
                             {grade.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {hasNoAssignedGrades && (
+                      <p className="text-xs text-muted-foreground">
+                        No grade levels assigned. Contact admin.
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

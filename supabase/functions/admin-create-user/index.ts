@@ -14,6 +14,7 @@ interface CreateUserRequest {
   grade_level_id?: string
   grade_level_name?: string
   section?: string
+  grade_level_ids?: string[] // For teachers: assigned grade levels
 }
 
 Deno.serve(async (req) => {
@@ -156,12 +157,34 @@ Deno.serve(async (req) => {
     }
     console.log(`${body.role} role assigned successfully`)
 
+    // For teachers, assign grade levels if provided
+    if (body.role === 'teacher' && body.grade_level_ids && body.grade_level_ids.length > 0) {
+      console.log('Assigning grade levels to teacher:', body.grade_level_ids)
+      
+      const gradeLevelInserts = body.grade_level_ids.map(grade_level_id => ({
+        teacher_id: newUserId,
+        grade_level_id,
+      }))
+
+      const { error: gradeLevelError } = await adminClient
+        .from('teacher_grade_levels')
+        .insert(gradeLevelInserts)
+
+      if (gradeLevelError) {
+        console.error('Grade level assignment error (non-fatal):', gradeLevelError)
+        // Non-fatal - teacher was created, grade levels can be assigned later
+      } else {
+        console.log('Grade levels assigned successfully')
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
         user_id: newUserId,
         role_assigned: body.role,
         school_assigned: body.school_id,
+        grade_levels_assigned: body.grade_level_ids?.length || 0,
         message: `${body.role} account created successfully with school assignment` 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
