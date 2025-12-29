@@ -11,6 +11,8 @@ interface Profile {
   full_name: string | null;
   phone: string | null;
   grade_level: string | null;
+  grade_level_id: string | null;
+  school_id: string | null;
   section: string | null;
   avatar_url: string | null;
   created_at: string;
