@@ -5,6 +5,7 @@ import { AppSidebar } from './AppSidebar';
 import { BottomNav } from './BottomNav';
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -12,6 +13,9 @@ export function AppLayout() {
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
   const { user, loading } = useAuth();
+  
+  // Enable realtime notifications for students
+  useRealtimeNotifications();
 
   // Listen for localStorage changes to sync collapsed state
   useEffect(() => {

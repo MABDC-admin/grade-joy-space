@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -17,36 +17,7 @@ export function useUnreadContent() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user || !isStudent) {
-      setLoading(false);
-      return;
-    }
-
-    fetchUnreadCounts();
-
-    // Subscribe to realtime changes
-    const classworkChannel = supabase
-      .channel('classwork-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'classwork_items' }, () => {
-        fetchUnreadCounts();
-      })
-      .subscribe();
-
-    const announcementChannel = supabase
-      .channel('announcement-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'announcements' }, () => {
-        fetchUnreadCounts();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(classworkChannel);
-      supabase.removeChannel(announcementChannel);
-    };
-  }, [user, isStudent]);
-
-  const fetchUnreadCounts = async () => {
+  const fetchUnreadCounts = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -116,7 +87,44 @@ export function useUnreadContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !isStudent) {
+      setLoading(false);
+      return;
+    }
+
+    fetchUnreadCounts();
+
+    // Subscribe to realtime changes for immediate updates
+    const classworkChannel = supabase
+      .channel('unread-classwork-updates')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'classwork_items' 
+      }, () => {
+        fetchUnreadCounts();
+      })
+      .subscribe();
+
+    const announcementChannel = supabase
+      .channel('unread-announcement-updates')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'announcements' 
+      }, () => {
+        fetchUnreadCounts();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(classworkChannel);
+      supabase.removeChannel(announcementChannel);
+    };
+  }, [user, isStudent, fetchUnreadCounts]);
 
   const markAsRead = async (contentId: string, contentType: 'classwork' | 'announcement') => {
     if (!user) return;
