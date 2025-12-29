@@ -115,8 +115,10 @@ export type Database = {
           created_by: string | null
           description: string | null
           grade_level: string | null
+          grade_level_id: string | null
           id: string
           name: string
+          school_id: string | null
           section: string | null
           subject: string | null
         }
@@ -127,8 +129,10 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           grade_level?: string | null
+          grade_level_id?: string | null
           id?: string
           name: string
+          school_id?: string | null
           section?: string | null
           subject?: string | null
         }
@@ -139,12 +143,29 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           grade_level?: string | null
+          grade_level_id?: string | null
           id?: string
           name?: string
+          school_id?: string | null
           section?: string | null
           subject?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "classes_grade_level_id_fkey"
+            columns: ["grade_level_id"]
+            isOneToOne: false
+            referencedRelation: "grade_levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classes_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       classwork_items: {
         Row: {
@@ -206,6 +227,27 @@ export type Database = {
           },
         ]
       }
+      grade_levels: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          order_index: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          order_index: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          order_index?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -213,8 +255,10 @@ export type Database = {
           email: string
           full_name: string | null
           grade_level: string | null
+          grade_level_id: string | null
           id: string
           phone: string | null
+          school_id: string | null
           section: string | null
           user_id: string
         }
@@ -224,8 +268,10 @@ export type Database = {
           email: string
           full_name?: string | null
           grade_level?: string | null
+          grade_level_id?: string | null
           id?: string
           phone?: string | null
+          school_id?: string | null
           section?: string | null
           user_id: string
         }
@@ -235,10 +281,54 @@ export type Database = {
           email?: string
           full_name?: string | null
           grade_level?: string | null
+          grade_level_id?: string | null
           id?: string
           phone?: string | null
+          school_id?: string | null
           section?: string | null
           user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_grade_level_id_fkey"
+            columns: ["grade_level_id"]
+            isOneToOne: false
+            referencedRelation: "grade_levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schools: {
+        Row: {
+          address: string | null
+          code: string
+          created_at: string
+          id: string
+          logo_url: string | null
+          name: string
+        }
+        Insert: {
+          address?: string | null
+          code?: string
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name: string
+        }
+        Update: {
+          address?: string | null
+          code?: string
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name?: string
         }
         Relationships: []
       }
@@ -395,6 +485,10 @@ export type Database = {
       }
       is_class_teacher: {
         Args: { _class_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_school_member: {
+        Args: { _school_id: string; _user_id: string }
         Returns: boolean
       }
     }
