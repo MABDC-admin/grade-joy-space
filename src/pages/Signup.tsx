@@ -33,12 +33,18 @@ interface GradeLevel {
   order_index: number;
 }
 
+interface School {
+  id: string;
+  name: string;
+}
+
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
   role: z.enum(['student', 'teacher'], { required_error: 'Please select a role' }),
+  schoolId: z.string({ required_error: 'Please select a school' }).min(1, 'Please select a school'),
   gradeLevelId: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -59,6 +65,7 @@ type SignupValues = z.infer<typeof signupSchema>;
 export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -70,6 +77,7 @@ export default function Signup() {
       password: '', 
       confirmPassword: '',
       role: undefined,
+      schoolId: '',
       gradeLevelId: undefined,
     },
   });
@@ -77,14 +85,22 @@ export default function Signup() {
   const selectedRole = form.watch('role');
 
   useEffect(() => {
-    const fetchGradeLevels = async () => {
-      const { data } = await supabase
+    const fetchData = async () => {
+      // Fetch grade levels
+      const { data: gradesData } = await supabase
         .from('grade_levels')
         .select('*')
         .order('order_index');
-      setGradeLevels(data || []);
+      setGradeLevels(gradesData || []);
+      
+      // Fetch schools
+      const { data: schoolsData } = await supabase
+        .from('schools')
+        .select('id, name')
+        .order('name');
+      setSchools(schoolsData || []);
     };
-    fetchGradeLevels();
+    fetchData();
   }, []);
 
   if (user) {
@@ -104,6 +120,7 @@ export default function Signup() {
         data: {
           full_name: values.fullName,
           role: values.role,
+          school_id: values.schoolId,
           grade_level_id: values.role === 'student' ? values.gradeLevelId : null,
         }
       }
@@ -131,7 +148,7 @@ export default function Signup() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl gradient-primary shadow-lg">
             <BookOpen className="h-8 w-8 text-primary-foreground" />
           </div>
-          <h1 className="font-display text-2xl font-medium">MABDC Classroom</h1>
+          <h1 className="font-display text-2xl font-medium">Classroom</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Create your account
           </p>
@@ -171,6 +188,31 @@ export default function Signup() {
                           </div>
                         </RadioGroup>
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="schoolId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>School</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select your school" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {schools.map((school) => (
+                            <SelectItem key={school.id} value={school.id}>
+                              {school.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
