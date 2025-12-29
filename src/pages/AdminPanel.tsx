@@ -40,7 +40,7 @@ import { CreateSchoolDialog } from '@/components/admin/CreateSchoolDialog';
 import { CreateTeacherDialog } from '@/components/admin/CreateTeacherDialog';
 import { CreateStudentDialog } from '@/components/admin/CreateStudentDialog';
 import { AssignGradeLevelsDialog } from '@/components/admin/AssignGradeLevelsDialog';
-import { AccountRepairSection } from '@/components/admin/AccountRepairSection';
+
 import { Button } from '@/components/ui/button';
 
 interface SchoolData {
@@ -103,6 +103,7 @@ export default function AdminPanel() {
     userEmail: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     if (isAdmin) {
@@ -279,6 +280,23 @@ export default function AdminPanel() {
     }
   };
 
+  const seedTeachers = async () => {
+    setSeeding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('seed-teachers');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      toast.success(data?.message || 'Teachers created successfully');
+      fetchData();
+    } catch (error: any) {
+      console.error('Seed teachers error:', error);
+      toast.error(error.message || 'Failed to seed teachers');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="space-y-4">
@@ -318,16 +336,28 @@ export default function AdminPanel() {
             Manage schools, teachers, students, and classes
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchData}
-          disabled={loading}
-          className="gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={seedTeachers}
+            disabled={seeding}
+            className="gap-2"
+          >
+            <UserPlus className={`h-4 w-4 ${seeding ? 'animate-pulse' : ''}`} />
+            {seeding ? 'Creating...' : 'Seed Teachers'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchData}
+            disabled={loading}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -381,12 +411,6 @@ export default function AdminPanel() {
         </Card>
       </div>
 
-      {/* Account Repair Section */}
-      <AccountRepairSection
-        users={users}
-        schools={schools}
-        onRepairComplete={fetchData}
-      />
 
       <Tabs defaultValue="schools">
         <TabsList>
