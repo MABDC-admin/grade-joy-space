@@ -3,6 +3,7 @@ import { ClassCard } from '@/components/dashboard/ClassCard';
 import { CreateClassDialog } from '@/components/dashboard/CreateClassDialog';
 import { JoinClassDialog } from '@/components/dashboard/JoinClassDialog';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSchool } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BookOpen, Calendar, Clock } from 'lucide-react';
@@ -30,6 +31,7 @@ interface UpcomingItem {
 
 export default function Dashboard() {
   const { user, profile, isAdmin, isTeacher, isStudent } = useAuth();
+  const { selectedSchoolId } = useSchool();
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,8 @@ export default function Dashboard() {
 
     setLoading(true);
     try {
-      const userSchoolId = profile?.school_id;
+      // For admins, use selected school from context; for others, use their profile school
+      const effectiveSchoolId = isAdmin ? selectedSchoolId : profile?.school_id;
 
       // Fetch classes based on role
       if (isAdmin || isTeacher) {
@@ -57,9 +60,9 @@ export default function Dashboard() {
             .select('*')
             .in('id', classIds);
           
-          // Filter by school if user has a school assigned (non-admin users)
-          if (userSchoolId && !isAdmin) {
-            query = query.eq('school_id', userSchoolId);
+          // Filter by effective school (admin uses selector, others use profile)
+          if (effectiveSchoolId) {
+            query = query.eq('school_id', effectiveSchoolId);
           }
           
           const { data } = await query;
@@ -71,8 +74,8 @@ export default function Dashboard() {
             .select('*')
             .eq('created_by', user.id);
           
-          if (userSchoolId && !isAdmin) {
-            query = query.eq('school_id', userSchoolId);
+          if (effectiveSchoolId) {
+            query = query.eq('school_id', effectiveSchoolId);
           }
           
           const { data } = await query;
@@ -94,8 +97,8 @@ export default function Dashboard() {
             .in('id', classIds);
           
           // Filter by school if user has a school assigned
-          if (userSchoolId) {
-            query = query.eq('school_id', userSchoolId);
+          if (effectiveSchoolId) {
+            query = query.eq('school_id', effectiveSchoolId);
           }
           
           const { data } = await query;
@@ -121,9 +124,9 @@ export default function Dashboard() {
         .limit(5);
 
       if (items) {
-        // Filter items by user's school
-        const filteredItems = userSchoolId && !isAdmin
-          ? items.filter((item: any) => item.classes?.school_id === userSchoolId)
+        // Filter items by effective school
+        const filteredItems = effectiveSchoolId
+          ? items.filter((item: any) => item.classes?.school_id === effectiveSchoolId)
           : items;
         
         setUpcomingItems(
@@ -145,7 +148,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchClasses();
-  }, [user, profile, isAdmin, isTeacher]);
+  }, [user, profile, isAdmin, isTeacher, selectedSchoolId]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'No due date';
