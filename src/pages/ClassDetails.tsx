@@ -120,6 +120,8 @@ export default function ClassDetails() {
           id: 'uncategorized',
           name: 'Uncategorized',
           order_index: -1,
+          class_id: classId,
+          created_at: new Date().toISOString(),
           items: uncategorizedItems,
         });
       }
