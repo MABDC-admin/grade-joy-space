@@ -62,29 +62,19 @@ export function CreateTeacherDialog({ schools, onTeacherCreated }: CreateTeacher
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
-      // Create user via Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          data: { full_name: values.full_name },
+      // Call backend function to create teacher (uses service role)
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email: values.email,
+          password: values.password,
+          full_name: values.full_name,
+          role: 'teacher',
+          school_id: values.school_id,
         },
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
-
-      // Update profile with school
-      await supabase
-        .from('profiles')
-        .update({ school_id: values.school_id, full_name: values.full_name })
-        .eq('user_id', authData.user.id);
-
-      // Add teacher role
-      await supabase.from('user_roles').insert({
-        user_id: authData.user.id,
-        role: 'teacher',
-      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Teacher created successfully!');
       form.reset();

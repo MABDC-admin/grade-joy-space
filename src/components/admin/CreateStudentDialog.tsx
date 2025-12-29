@@ -78,34 +78,25 @@ export function CreateStudentDialog({ schools, gradeLevels, onStudentCreated }: 
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
-      // Create user via Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          data: { full_name: values.full_name },
-        },
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
-
       // Get grade level name for the profile
       const gradeLevel = gradeLevels.find(g => g.id === values.grade_level_id);
 
-      // Update profile with school and grade level
-      await supabase
-        .from('profiles')
-        .update({ 
-          school_id: values.school_id, 
-          grade_level_id: values.grade_level_id,
+      // Call backend function to create student (uses service role)
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email: values.email,
+          password: values.password,
           full_name: values.full_name,
-          grade_level: gradeLevel?.name || null,
+          role: 'student',
+          school_id: values.school_id,
+          grade_level_id: values.grade_level_id,
+          grade_level_name: gradeLevel?.name || null,
           section: values.section || null,
-        })
-        .eq('user_id', authData.user.id);
+        },
+      });
 
-      // Student role is added by default via trigger
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Student created successfully!');
       form.reset();
