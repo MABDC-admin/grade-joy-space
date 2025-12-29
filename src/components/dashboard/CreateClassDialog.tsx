@@ -79,7 +79,7 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
   const [schools, setSchools] = useState<School[]>([]);
   const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
   const [teacherGradeLevelIds, setTeacherGradeLevelIds] = useState<string[]>([]);
-  const { user, profile, isAdmin, isTeacher } = useAuth();
+  const { user, profile, isAdmin, isTeacher, loading: authLoading } = useAuth();
   const extendedProfile = profile as ExtendedProfile | null;
 
   useEffect(() => {
@@ -127,12 +127,21 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
     if (!user) return;
 
     // For teachers, enforce school_id from their profile
+    // For admins, use the selected school or null
     const schoolId = isAdmin 
       ? (values.school_id && values.school_id !== 'none' ? values.school_id : null)
       : extendedProfile?.school_id;
 
+    console.log('Creating class with:', {
+      isAdmin,
+      isTeacher,
+      schoolId,
+      profileSchoolId: extendedProfile?.school_id,
+      userId: user.id,
+    });
+
     // Preflight check: verify teacher has proper setup
-    if (isTeacher && !isAdmin) {
+    if (!isAdmin) {
       // Check if user has teacher role
       const { data: roles } = await supabase
         .from('user_roles')
@@ -140,6 +149,7 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
         .eq('user_id', user.id);
       
       const hasTeacherRole = roles?.some(r => r.role === 'teacher');
+      console.log('Role check:', { roles, hasTeacherRole });
       
       if (!hasTeacherRole) {
         toast.error(
@@ -214,6 +224,11 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
     : sortedGradeLevels.filter(g => teacherGradeLevelIds.includes(g.id));
 
   const hasNoAssignedGrades = isTeacher && !isAdmin && teacherGradeLevelIds.length === 0;
+
+  // Don't show the button while auth is loading
+  if (authLoading) {
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
