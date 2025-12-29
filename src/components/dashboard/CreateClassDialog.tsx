@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -38,11 +38,23 @@ const formSchema = z.object({
   section: z.string().optional(),
   subject: z.string().optional(),
   description: z.string().optional(),
-  grade_level: z.string().optional(),
+  school_id: z.string().optional(),
+  grade_level_id: z.string().optional(),
   color: z.string().default('green'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+interface School {
+  id: string;
+  name: string;
+}
+
+interface GradeLevel {
+  id: string;
+  name: string;
+  order_index: number;
+}
 
 interface CreateClassDialogProps {
   onClassCreated?: () => void;
@@ -59,7 +71,22 @@ const colorOptions = [
 export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const [schools, setSchools] = useState<School[]>([]);
+  const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
+  const { user, profile } = useAuth();
+
+  useEffect(() => {
+    fetchOptions();
+  }, []);
+
+  const fetchOptions = async () => {
+    const [schoolsRes, gradesRes] = await Promise.all([
+      supabase.from('schools').select('id, name').order('name'),
+      supabase.from('grade_levels').select('*').order('order_index'),
+    ]);
+    setSchools(schoolsRes.data || []);
+    setGradeLevels(gradesRes.data || []);
+  };
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -68,7 +95,8 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
       section: '',
       subject: '',
       description: '',
-      grade_level: '',
+      school_id: '',
+      grade_level_id: '',
       color: 'green',
     },
   });
@@ -78,6 +106,9 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
 
     setLoading(true);
     try {
+      // Find grade level name
+      const gradeLevel = gradeLevels.find(g => g.id === values.grade_level_id);
+
       const { data: newClass, error } = await supabase
         .from('classes')
         .insert({
@@ -85,7 +116,9 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
           section: values.section || null,
           subject: values.subject || null,
           description: values.description || null,
-          grade_level: values.grade_level || null,
+          school_id: values.school_id && values.school_id !== 'none' ? values.school_id : (profile as any)?.school_id || null,
+          grade_level_id: values.grade_level_id && values.grade_level_id !== 'none' ? values.grade_level_id : null,
+          grade_level: gradeLevel?.name || values.grade_level_id || null,
           color: values.color,
           created_by: user.id,
         })
@@ -110,6 +143,8 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
       setLoading(false);
     }
   };
+
+  const sortedGradeLevels = [...gradeLevels].sort((a, b) => a.order_index - b.order_index);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -142,7 +177,61 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
               )}
             />
 
+            {schools.length > 0 && (
+              <FormField
+                control={form.control}
+                name="school_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>School</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select school" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">No school</SelectItem>
+                        {schools.map((school) => (
+                          <SelectItem key={school.id} value={school.id}>
+                            {school.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="grade_level_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Grade Level</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select grade" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">No grade</SelectItem>
+                        {sortedGradeLevels.map((grade) => (
+                          <SelectItem key={grade.id} value={grade.id}>
+                            {grade.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="section"
@@ -151,20 +240,6 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
                     <FormLabel>Section</FormLabel>
                     <FormControl>
                       <Input placeholder="Section A" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="grade_level"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Grade Level</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Grade 10" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
