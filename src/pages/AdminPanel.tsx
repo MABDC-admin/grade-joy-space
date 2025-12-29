@@ -6,6 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Select,
@@ -76,6 +86,13 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
+  const [roleConfirmDialog, setRoleConfirmDialog] = useState<{
+    open: boolean;
+    userId: string;
+    userName: string;
+    role: 'admin' | 'teacher' | 'student';
+    action: 'add' | 'remove';
+  } | null>(null);
 
   useEffect(() => {
     if (isAdmin) {
@@ -160,9 +177,28 @@ export default function AdminPanel() {
     }
   };
 
-  const toggleRole = async (userId: string, role: 'admin' | 'teacher' | 'student', hasRole: boolean) => {
+  const openRoleConfirmDialog = (
+    userId: string,
+    userName: string,
+    role: 'admin' | 'teacher' | 'student',
+    hasRole: boolean
+  ) => {
+    setRoleConfirmDialog({
+      open: true,
+      userId,
+      userName,
+      role,
+      action: hasRole ? 'remove' : 'add',
+    });
+  };
+
+  const confirmRoleChange = async () => {
+    if (!roleConfirmDialog) return;
+    
+    const { userId, role, action } = roleConfirmDialog;
+    
     try {
-      if (hasRole) {
+      if (action === 'remove') {
         await supabase
           .from('user_roles')
           .delete()
@@ -178,6 +214,8 @@ export default function AdminPanel() {
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update role');
+    } finally {
+      setRoleConfirmDialog(null);
     }
   };
 
@@ -404,7 +442,12 @@ export default function AdminPanel() {
                         <Button
                           variant={user.roles.includes('admin') ? 'default' : 'outline'}
                           size="sm"
-                          onClick={() => toggleRole(user.user_id, 'admin', user.roles.includes('admin'))}
+                          onClick={() => openRoleConfirmDialog(
+                            user.user_id,
+                            user.full_name || user.email,
+                            'admin',
+                            user.roles.includes('admin')
+                          )}
                         >
                           Admin
                         </Button>
@@ -544,6 +587,42 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Role Change Confirmation Dialog */}
+      <AlertDialog 
+        open={roleConfirmDialog?.open ?? false} 
+        onOpenChange={(open) => !open && setRoleConfirmDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {roleConfirmDialog?.action === 'remove' ? 'Remove' : 'Add'} {roleConfirmDialog?.role} role?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {roleConfirmDialog?.action === 'remove' ? (
+                <>
+                  Are you sure you want to remove the <strong>{roleConfirmDialog?.role}</strong> role 
+                  from <strong>{roleConfirmDialog?.userName}</strong>? This action can be undone later.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to grant the <strong>{roleConfirmDialog?.role}</strong> role 
+                  to <strong>{roleConfirmDialog?.userName}</strong>?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRoleChange}
+              className={roleConfirmDialog?.action === 'remove' ? 'bg-destructive hover:bg-destructive/90' : ''}
+            >
+              {roleConfirmDialog?.action === 'remove' ? 'Remove Role' : 'Add Role'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
