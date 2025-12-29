@@ -115,9 +115,31 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
       ? (values.school_id && values.school_id !== 'none' ? values.school_id : null)
       : extendedProfile?.school_id;
 
-    if (isTeacher && !isAdmin && !schoolId) {
-      toast.error('Your account is not assigned to a school. Please contact an administrator.');
-      return;
+    // Preflight check: verify teacher has proper setup
+    if (isTeacher && !isAdmin) {
+      // Check if user has teacher role
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      const hasTeacherRole = roles?.some(r => r.role === 'teacher');
+      
+      if (!hasTeacherRole) {
+        toast.error(
+          'Your account is missing the Teacher role. Please contact an administrator to repair your account.',
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      if (!schoolId) {
+        toast.error(
+          'Your account is not assigned to a school. Please contact an administrator to assign you to a school.',
+          { duration: 6000 }
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -141,7 +163,15 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Provide more helpful error messages
+        if (error.message.includes('row-level security')) {
+          throw new Error(
+            'Permission denied. This usually means your account is missing the teacher role or school assignment. Please contact an administrator.'
+          );
+        }
+        throw error;
+      }
 
       // Add creator as teacher
       await supabase.from('class_teachers').insert({
