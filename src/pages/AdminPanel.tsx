@@ -27,6 +27,7 @@ import {
 import { CreateSchoolDialog } from '@/components/admin/CreateSchoolDialog';
 import { CreateTeacherDialog } from '@/components/admin/CreateTeacherDialog';
 import { CreateStudentDialog } from '@/components/admin/CreateStudentDialog';
+import { AccountRepairSection } from '@/components/admin/AccountRepairSection';
 import { Button } from '@/components/ui/button';
 
 interface SchoolData {
@@ -268,6 +269,13 @@ export default function AdminPanel() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Account Repair Section */}
+      <AccountRepairSection
+        users={users}
+        schools={schools}
+        onRepairComplete={fetchData}
+      />
 
       <Tabs defaultValue="schools">
         <TabsList>

@@ -108,63 +108,64 @@ Deno.serve(async (req) => {
     const newUserId = authData.user.id
     console.log('User created with ID:', newUserId)
 
-    // Update profile with school and other fields
+    // Use upsert for profile to handle both new users and trigger-created profiles
+    const profileData = {
+      user_id: newUserId,
+      email: body.email,
+      school_id: body.school_id,
+      grade_level_id: body.grade_level_id || null,
+      grade_level: body.grade_level_name || null,
+      section: body.section || null,
+      full_name: body.full_name,
+    }
+
     const { error: profileError } = await adminClient
       .from('profiles')
-      .update({
-        school_id: body.school_id,
-        grade_level_id: body.grade_level_id || null,
-        grade_level: body.grade_level_name || null,
-        section: body.section || null,
-        full_name: body.full_name,
-      })
-      .eq('user_id', newUserId)
+      .upsert(profileData, { onConflict: 'user_id' })
 
     if (profileError) {
-      console.error('Profile update error:', profileError)
-      // Don't fail the whole request, profile trigger might not have run yet
-      // Try insert instead
-      const { error: insertError } = await adminClient
-        .from('profiles')
-        .insert({
-          user_id: newUserId,
-          email: body.email,
-          school_id: body.school_id,
-          grade_level_id: body.grade_level_id || null,
-          grade_level: body.grade_level_name || null,
-          section: body.section || null,
-          full_name: body.full_name,
-        })
-      
-      if (insertError) {
-        console.error('Profile insert error:', insertError)
-      }
+      console.error('Profile upsert error:', profileError)
+      // Continue anyway - profile might exist from trigger
+    } else {
+      console.log('Profile upserted successfully')
     }
 
-    // If role is teacher, add teacher role (student role is added by trigger)
-    if (body.role === 'teacher') {
-      const { error: roleError } = await adminClient
-        .from('user_roles')
-        .insert({
-          user_id: newUserId,
-          role: 'teacher'
-        })
+    // Always ensure the correct role exists
+    // First delete any existing roles for this user to start fresh
+    const { error: deleteRoleError } = await adminClient
+      .from('user_roles')
+      .delete()
+      .eq('user_id', newUserId)
 
-      if (roleError) {
-        console.error('Role insert error:', roleError)
-        return new Response(
-          JSON.stringify({ error: 'User created but failed to assign teacher role' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-      console.log('Teacher role assigned')
+    if (deleteRoleError) {
+      console.error('Role delete error (non-fatal):', deleteRoleError)
     }
+
+    // Insert the designated role
+    const { error: roleError } = await adminClient
+      .from('user_roles')
+      .insert({ user_id: newUserId, role: body.role })
+
+    if (roleError) {
+      console.error('Role insert error:', roleError)
+      return new Response(
+        JSON.stringify({ 
+          error: `User created but failed to assign ${body.role} role: ${roleError.message}`,
+          user_id: newUserId,
+          partial: true
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    console.log(`${body.role} role assigned successfully`)
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         user_id: newUserId,
-        message: `${body.role} account created successfully` 
+        role_assigned: body.role,
+        school_assigned: body.school_id,
+        message: `${body.role} account created successfully with school assignment` 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
