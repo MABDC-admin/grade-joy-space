@@ -21,6 +21,8 @@ interface ClassData {
   class_code: string;
   created_by: string | null;
   school_id: string | null;
+  studentCount?: number;
+  assignmentCount?: number;
 }
 
 interface UpcomingItem {
@@ -41,6 +43,42 @@ export default function Dashboard() {
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const fetchClassCounts = async (classIds: string[]): Promise<Map<string, { students: number; assignments: number }>> => {
+    const countsMap = new Map<string, { students: number; assignments: number }>();
+    
+    if (classIds.length === 0) return countsMap;
+
+    // Fetch student counts
+    const { data: memberCounts } = await supabase
+      .from('class_members')
+      .select('class_id')
+      .in('class_id', classIds);
+
+    // Fetch assignment counts
+    const { data: assignmentCounts } = await supabase
+      .from('classwork_items')
+      .select('class_id')
+      .in('class_id', classIds)
+      .eq('type', 'assignment');
+
+    // Initialize counts
+    classIds.forEach(id => countsMap.set(id, { students: 0, assignments: 0 }));
+
+    // Count students per class
+    memberCounts?.forEach(m => {
+      const current = countsMap.get(m.class_id);
+      if (current) current.students++;
+    });
+
+    // Count assignments per class
+    assignmentCounts?.forEach(a => {
+      const current = countsMap.get(a.class_id);
+      if (current) current.assignments++;
+    });
+
+    return countsMap;
+  };
 
   const fetchClasses = async () => {
     if (!user) return;
@@ -68,7 +106,15 @@ export default function Dashboard() {
           }
           
           const { data } = await query;
-          setClasses(data || []);
+          
+          // Fetch counts for these classes
+          const counts = await fetchClassCounts(data?.map(c => c.id) || []);
+          
+          setClasses((data || []).map(cls => ({
+            ...cls,
+            studentCount: counts.get(cls.id)?.students || 0,
+            assignmentCount: counts.get(cls.id)?.assignments || 0,
+          })));
         } else {
           let query = supabase
             .from('classes')
@@ -80,7 +126,15 @@ export default function Dashboard() {
           }
           
           const { data } = await query;
-          setClasses(data || []);
+          
+          // Fetch counts for these classes
+          const counts = await fetchClassCounts(data?.map(c => c.id) || []);
+          
+          setClasses((data || []).map(cls => ({
+            ...cls,
+            studentCount: counts.get(cls.id)?.students || 0,
+            assignmentCount: counts.get(cls.id)?.assignments || 0,
+          })));
         }
       } else {
         // Students see classes they joined
@@ -102,7 +156,15 @@ export default function Dashboard() {
           }
           
           const { data } = await query;
-          setClasses(data || []);
+          
+          // Fetch counts for these classes
+          const counts = await fetchClassCounts(data?.map(c => c.id) || []);
+          
+          setClasses((data || []).map(cls => ({
+            ...cls,
+            studentCount: counts.get(cls.id)?.students || 0,
+            assignmentCount: counts.get(cls.id)?.assignments || 0,
+          })));
 
           // For students, fetch upcoming assignments from their enrolled classes
           await fetchUpcomingForStudent(classIds);
@@ -283,6 +345,8 @@ export default function Dashboard() {
                     subject={cls.subject}
                     color={cls.color || 'green'}
                     classCode={cls.class_code}
+                    studentCount={cls.studentCount || 0}
+                    assignmentCount={cls.assignmentCount || 0}
                     hasNewAnnouncement={classUnread?.announcements > 0}
                     unreadCount={totalUnread}
                   />
