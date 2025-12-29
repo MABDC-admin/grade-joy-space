@@ -39,6 +39,7 @@ import {
 import { CreateSchoolDialog } from '@/components/admin/CreateSchoolDialog';
 import { CreateTeacherDialog } from '@/components/admin/CreateTeacherDialog';
 import { CreateStudentDialog } from '@/components/admin/CreateStudentDialog';
+import { AssignGradeLevelsDialog } from '@/components/admin/AssignGradeLevelsDialog';
 import { AccountRepairSection } from '@/components/admin/AccountRepairSection';
 import { Button } from '@/components/ui/button';
 
@@ -66,6 +67,7 @@ interface UserData {
   section: string | null;
   roles: string[];
   school_name?: string;
+  assigned_grade_levels?: { id: string; name: string }[];
 }
 
 interface ClassData {
@@ -134,8 +136,25 @@ export default function AdminPanel() {
         .from('user_roles')
         .select('*');
 
+      // Fetch teacher grade level assignments
+      const { data: teacherGradeLevels } = await supabase
+        .from('teacher_grade_levels')
+        .select('teacher_id, grade_level_id');
+
       const usersWithRoles = (profiles || []).map(profile => {
         const school = schoolsData?.find(s => s.id === profile.school_id);
+        const userGradeLevelIds = (teacherGradeLevels || [])
+          .filter(tgl => tgl.teacher_id === profile.user_id)
+          .map(tgl => tgl.grade_level_id);
+        const assignedGradeLevels = (gradesData || [])
+          .filter(g => userGradeLevelIds.includes(g.id))
+          .map(g => ({ id: g.id, name: g.name }))
+          .sort((a, b) => {
+            const gradeA = gradesData?.find(g => g.id === a.id);
+            const gradeB = gradesData?.find(g => g.id === b.id);
+            return (gradeA?.order_index || 0) - (gradeB?.order_index || 0);
+          });
+
         return {
           user_id: profile.user_id,
           email: profile.email,
@@ -149,6 +168,7 @@ export default function AdminPanel() {
             .filter(r => r.user_id === profile.user_id)
             .map(r => r.role),
           school_name: school?.name,
+          assigned_grade_levels: assignedGradeLevels,
         };
       });
 
@@ -448,7 +468,7 @@ export default function AdminPanel() {
                     ))}
                   </SelectContent>
                 </Select>
-                <CreateTeacherDialog schools={schools} onTeacherCreated={fetchData} />
+                <CreateTeacherDialog schools={schools} gradeLevels={gradeLevels} onTeacherCreated={fetchData} />
               </div>
             </CardHeader>
             <CardContent>
@@ -475,10 +495,30 @@ export default function AdminPanel() {
                           <p className="text-sm text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {user.school_name && (
                           <Badge variant="outline">{user.school_name}</Badge>
                         )}
+                        {user.assigned_grade_levels && user.assigned_grade_levels.length > 0 && (
+                          <div className="flex gap-1 flex-wrap">
+                            {user.assigned_grade_levels.slice(0, 3).map(g => (
+                              <Badge key={g.id} variant="secondary" className="text-xs">
+                                {g.name}
+                              </Badge>
+                            ))}
+                            {user.assigned_grade_levels.length > 3 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{user.assigned_grade_levels.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        <AssignGradeLevelsDialog
+                          teacherId={user.user_id}
+                          teacherName={user.full_name || user.email}
+                          gradeLevels={gradeLevels}
+                          onAssignmentsChanged={fetchData}
+                        />
                         <Button
                           variant={user.roles.includes('admin') ? 'default' : 'outline'}
                           size="sm"

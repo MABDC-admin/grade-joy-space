@@ -414,6 +414,35 @@ export type Database = {
           },
         ]
       }
+      teacher_grade_levels: {
+        Row: {
+          created_at: string
+          grade_level_id: string
+          id: string
+          teacher_id: string
+        }
+        Insert: {
+          created_at?: string
+          grade_level_id: string
+          id?: string
+          teacher_id: string
+        }
+        Update: {
+          created_at?: string
+          grade_level_id?: string
+          id?: string
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_grade_levels_grade_level_id_fkey"
+            columns: ["grade_level_id"]
+            isOneToOne: false
+            referencedRelation: "grade_levels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       topics: {
         Row: {
           class_id: string
@@ -472,6 +501,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_teach_grade: {
+        Args: { _grade_level_id: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

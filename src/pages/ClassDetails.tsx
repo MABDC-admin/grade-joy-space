@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList, UserPlus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -29,6 +29,7 @@ interface ClassData {
   class_code: string;
   color: string | null;
   grade_level: string | null;
+  grade_level_id: string | null;
   created_by: string | null;
 }
 
@@ -59,6 +60,13 @@ interface Member {
   role: 'teacher' | 'student';
 }
 
+interface AvailableStudent {
+  user_id: string;
+  full_name: string | null;
+  email: string;
+  avatar_url: string | null;
+}
+
 const colorVariants: Record<string, string> = {
   green: 'class-card-gradient-green',
   blue: 'class-card-gradient-blue',
@@ -74,7 +82,9 @@ export default function ClassDetails() {
   const [classData, setClassData] = useState<ClassData | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<AvailableStudent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addingStudentId, setAddingStudentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (classId) {
@@ -161,11 +171,86 @@ export default function ClassDetails() {
 
         setMembers(membersList);
       }
+
+      // Fetch available students (same grade level, not in class)
+      if (cls.grade_level_id) {
+        await fetchAvailableStudents(cls.grade_level_id, studentIds);
+      }
     } catch (error) {
       console.error('Error fetching class:', error);
       toast.error('Failed to load class');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAvailableStudents = async (gradeLevelId: string, existingStudentIds: string[]) => {
+    try {
+      // Get all students with the same grade level
+      const { data: studentsWithGrade } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, email, avatar_url')
+        .eq('grade_level_id', gradeLevelId);
+
+      // Get user_ids that have student role
+      const { data: studentRoles } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'student');
+
+      const studentRoleIds = studentRoles?.map(r => r.user_id) || [];
+
+      // Filter to only students who aren't already in the class
+      const available = (studentsWithGrade || [])
+        .filter(p => 
+          studentRoleIds.includes(p.user_id) && 
+          !existingStudentIds.includes(p.user_id)
+        )
+        .map(p => ({
+          user_id: p.user_id,
+          full_name: p.full_name,
+          email: p.email,
+          avatar_url: p.avatar_url,
+        }));
+
+      setAvailableStudents(available);
+    } catch (error) {
+      console.error('Error fetching available students:', error);
+    }
+  };
+
+  const addStudentToClass = async (studentId: string) => {
+    if (!classId) return;
+    
+    setAddingStudentId(studentId);
+    try {
+      const { error } = await supabase
+        .from('class_members')
+        .insert({
+          class_id: classId,
+          student_id: studentId,
+        });
+
+      if (error) throw error;
+
+      toast.success('Student added to class');
+      
+      // Update local state
+      const addedStudent = availableStudents.find(s => s.user_id === studentId);
+      if (addedStudent) {
+        setMembers(prev => [...prev, {
+          id: addedStudent.user_id,
+          full_name: addedStudent.full_name,
+          email: addedStudent.email,
+          avatar_url: addedStudent.avatar_url,
+          role: 'student',
+        }]);
+        setAvailableStudents(prev => prev.filter(s => s.user_id !== studentId));
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add student');
+    } finally {
+      setAddingStudentId(null);
     }
   };
 
@@ -422,6 +507,61 @@ export default function ClassDetails() {
               )}
             </CardContent>
           </Card>
+
+          {/* Available Students (Same Grade Level) - Only visible to teachers/admins */}
+          {canManage && classData.grade_level_id && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="font-display text-lg">
+                    Available Students
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Students in {classData.grade_level || 'this grade level'} not yet enrolled
+                  </p>
+                </div>
+                <Badge variant="secondary">{availableStudents.length} available</Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {availableStudents.length > 0 ? (
+                  availableStudents.map((student) => (
+                    <div key={student.user_id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={student.avatar_url || undefined} />
+                          <AvatarFallback>{student.full_name?.charAt(0) || 'S'}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{student.full_name || 'Student'}</p>
+                          <p className="text-sm text-muted-foreground">{student.email}</p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => addStudentToClass(student.user_id)}
+                        disabled={addingStudentId === student.user_id}
+                      >
+                        {addingStudentId === student.user_id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <UserPlus className="h-4 w-4" />
+                            Add
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    All students in this grade level are already enrolled
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
