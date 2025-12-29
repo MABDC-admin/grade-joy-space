@@ -30,6 +30,7 @@ import {
 import { FileText, BookOpen, Upload, X, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useRobustFileUpload } from '@/hooks/useRobustFileUpload';
 
 const formSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
@@ -73,8 +74,12 @@ export function EditClassworkDialog({
   onClassworkUpdated 
 }: EditClassworkDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<any[]>(item.attachments || []);
+  
+  const { uploading, uploadFile, deleteFile } = useRobustFileUpload({
+    bucket: 'class-materials',
+    folder: item.id,
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -104,39 +109,23 @@ export function EditClassworkDialog({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setUploading(true);
     try {
-      const newAttachments: any[] = [];
-
       for (const file of Array.from(files)) {
-        const fileExt = file.name.split('.').pop();
-        const filePath = `${item.id}/${Date.now()}-${file.name}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('class-materials')
-          .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('class-materials')
-          .getPublicUrl(filePath);
-
-        newAttachments.push({
-          name: file.name,
-          path: filePath,
-          url: urlData.publicUrl,
-          type: file.type,
-          size: file.size,
-        });
+        const result = await uploadFile(file);
+        if (result) {
+          setAttachments(prev => [...prev, {
+            name: result.name,
+            path: result.path,
+            url: result.url,
+            type: result.type,
+            size: file.size,
+          }]);
+        }
       }
-
-      setAttachments(prev => [...prev, ...newAttachments]);
       toast.success(`${files.length} file(s) uploaded`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to upload files');
     } finally {
-      setUploading(false);
       e.target.value = '';
     }
   };
@@ -145,9 +134,7 @@ export function EditClassworkDialog({
     const attachment = attachments[index];
     try {
       if (attachment.path) {
-        await supabase.storage
-          .from('class-materials')
-          .remove([attachment.path]);
+        await deleteFile(attachment.path);
       }
       setAttachments(prev => prev.filter((_, i) => i !== index));
     } catch (error) {
