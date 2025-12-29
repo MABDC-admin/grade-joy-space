@@ -33,6 +33,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+// Extended profile type to include school_id
+interface ExtendedProfile {
+  school_id?: string | null;
+}
+
 const formSchema = z.object({
   name: z.string().min(1, 'Class name is required'),
   section: z.string().optional(),
@@ -73,7 +78,8 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
   const [loading, setLoading] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
   const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin, isTeacher } = useAuth();
+  const extendedProfile = profile as ExtendedProfile | null;
 
   useEffect(() => {
     fetchOptions();
@@ -104,6 +110,16 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
   const onSubmit = async (values: FormValues) => {
     if (!user) return;
 
+    // For teachers, enforce school_id from their profile
+    const schoolId = isAdmin 
+      ? (values.school_id && values.school_id !== 'none' ? values.school_id : null)
+      : extendedProfile?.school_id;
+
+    if (isTeacher && !isAdmin && !schoolId) {
+      toast.error('Your account is not assigned to a school. Please contact an administrator.');
+      return;
+    }
+
     setLoading(true);
     try {
       // Find grade level name
@@ -116,7 +132,7 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
           section: values.section || null,
           subject: values.subject || null,
           description: values.description || null,
-          school_id: values.school_id && values.school_id !== 'none' ? values.school_id : (profile as any)?.school_id || null,
+          school_id: schoolId,
           grade_level_id: values.grade_level_id && values.grade_level_id !== 'none' ? values.grade_level_id : null,
           grade_level: gradeLevel?.name || values.grade_level_id || null,
           color: values.color,
@@ -177,7 +193,8 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
               )}
             />
 
-            {schools.length > 0 && (
+            {/* Only show school selector for admins; teachers auto-use their school */}
+            {isAdmin && schools.length > 0 && (
               <FormField
                 control={form.control}
                 name="school_id"
@@ -203,6 +220,13 @@ export function CreateClassDialog({ onClassCreated }: CreateClassDialogProps) {
                   </FormItem>
                 )}
               />
+            )}
+
+            {/* Show teacher's assigned school as read-only info */}
+            {isTeacher && !isAdmin && extendedProfile?.school_id && (
+              <div className="text-sm text-muted-foreground">
+                School: {schools.find(s => s.id === extendedProfile.school_id)?.name || 'Your assigned school'}
+              </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
