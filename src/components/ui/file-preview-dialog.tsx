@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, FileText, Music, Video, File, RefreshCw, ImageIcon, AlertCircle } from 'lucide-react';
@@ -77,7 +78,10 @@ export function FilePreviewDialog({ open, onOpenChange, file }: FilePreviewDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <DialogTitle className="truncate pr-4">{file.name}</DialogTitle>
+          <div>
+            <DialogTitle className="truncate pr-4">{file.name}</DialogTitle>
+            <DialogDescription className="sr-only">Preview of {file.name}</DialogDescription>
+          </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleDownload}>
               <Download className="h-4 w-4 mr-2" />
@@ -97,7 +101,6 @@ export function FilePreviewDialog({ open, onOpenChange, file }: FilePreviewDialo
               <img
                 src={imageUrl}
                 alt={file.name}
-                crossOrigin="anonymous"
                 className={`max-w-full max-h-[70vh] object-contain transition-opacity ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
                 onLoad={() => setImageLoading(false)}
                 onError={() => {
