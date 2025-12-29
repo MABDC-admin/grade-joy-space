@@ -80,6 +80,8 @@ interface ClassData {
   student_count: number;
   school_name?: string;
   grade_level_name?: string;
+  school_id: string | null;
+  grade_level_id: string | null;
 }
 
 export default function AdminPanel() {
@@ -104,7 +106,13 @@ export default function AdminPanel() {
     userName: string;
     userEmail: string;
   } | null>(null);
+  const [deleteClassDialog, setDeleteClassDialog] = useState<{
+    open: boolean;
+    classId: string;
+    className: string;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deletingClass, setDeletingClass] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
@@ -197,6 +205,8 @@ export default function AdminPanel() {
           student_count: (members || []).filter(m => m.class_id === cls.id).length,
           school_name: school?.name,
           grade_level_name: grade?.name,
+          school_id: cls.school_id,
+          grade_level_id: cls.grade_level_id,
         };
       });
 
@@ -279,6 +289,35 @@ export default function AdminPanel() {
     } finally {
       setDeleting(false);
       setDeleteConfirmDialog(null);
+    }
+  };
+
+  const confirmDeleteClass = async () => {
+    if (!deleteClassDialog) return;
+    
+    setDeletingClass(true);
+    try {
+      const classId = deleteClassDialog.classId;
+      
+      // Delete in order: classwork_items, topics, class_members, class_teachers, announcements, then class
+      await supabase.from('classwork_items').delete().eq('class_id', classId);
+      await supabase.from('topics').delete().eq('class_id', classId);
+      await supabase.from('class_members').delete().eq('class_id', classId);
+      await supabase.from('class_teachers').delete().eq('class_id', classId);
+      await supabase.from('announcements').delete().eq('class_id', classId);
+
+      const { error } = await supabase.from('classes').delete().eq('id', classId);
+
+      if (error) throw error;
+
+      toast.success('Class deleted successfully');
+      fetchData();
+    } catch (error: any) {
+      console.error('Delete class error:', error);
+      toast.error(error.message || 'Failed to delete class');
+    } finally {
+      setDeletingClass(false);
+      setDeleteClassDialog(null);
     }
   };
 
@@ -722,6 +761,18 @@ export default function AdminPanel() {
                       <div className="flex items-center gap-3">
                         <Badge variant="outline">{cls.student_count} students</Badge>
                         <Badge variant="secondary">Code: {cls.class_code}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteClassDialog({
+                            open: true,
+                            classId: cls.id,
+                            className: cls.name,
+                          })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -795,6 +846,35 @@ export default function AdminPanel() {
               className="bg-destructive hover:bg-destructive/90"
             >
               {deleting ? 'Deleting...' : 'Delete User'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Class Confirmation Dialog */}
+      <AlertDialog 
+        open={deleteClassDialog?.open ?? false} 
+        onOpenChange={(open) => !open && setDeleteClassDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Class?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete <strong>"{deleteClassDialog?.className}"</strong>?
+              <br /><br />
+              <span className="text-destructive font-medium">
+                This will remove all topics, assignments, announcements, and enrolled students. This action cannot be undone.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingClass}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteClass}
+              disabled={deletingClass}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {deletingClass ? 'Deleting...' : 'Delete Class'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
