@@ -8,7 +8,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, FileText, BookOpen } from 'lucide-react';
+import { Plus, FileText, BookOpen, Upload, X, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -63,7 +62,9 @@ interface CreateClassworkDialogProps {
 export function CreateClassworkDialog({ classId, topics, onClassworkCreated }: CreateClassworkDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [type, setType] = useState<'lesson' | 'assignment'>('assignment');
+  const [attachments, setAttachments] = useState<any[]>([]);
   const { user } = useAuth();
 
   const form = useForm<FormValues>({
@@ -77,12 +78,68 @@ export function CreateClassworkDialog({ classId, topics, onClassworkCreated }: C
     },
   });
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      const newAttachments: any[] = [];
+      const tempId = Date.now().toString();
+
+      for (const file of Array.from(files)) {
+        const filePath = `temp/${tempId}/${file.name}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('class-materials')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('class-materials')
+          .getPublicUrl(filePath);
+
+        newAttachments.push({
+          name: file.name,
+          path: filePath,
+          url: urlData.publicUrl,
+          type: file.type,
+          size: file.size,
+        });
+      }
+
+      setAttachments(prev => [...prev, ...newAttachments]);
+      toast.success(`${files.length} file(s) uploaded`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload files');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeAttachment = async (index: number) => {
+    const attachment = attachments[index];
+    try {
+      if (attachment.path) {
+        await supabase.storage
+          .from('class-materials')
+          .remove([attachment.path]);
+      }
+      setAttachments(prev => prev.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error('Failed to remove file:', error);
+      setAttachments(prev => prev.filter((_, i) => i !== index));
+    }
+  };
+
   const onSubmit = async (values: FormValues) => {
     if (!user) return;
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('classwork_items')
         .insert({
           class_id: classId,
@@ -93,12 +150,46 @@ export function CreateClassworkDialog({ classId, topics, onClassworkCreated }: C
           due_date: values.due_date ? new Date(values.due_date).toISOString() : null,
           points: values.points ? parseInt(values.points) : null,
           created_by: user.id,
-        });
+          attachments: attachments,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
+      // Move files from temp folder to proper folder
+      if (data && attachments.length > 0) {
+        const updatedAttachments = [];
+        for (const att of attachments) {
+          const newPath = `${data.id}/${att.name}`;
+          try {
+            await supabase.storage
+              .from('class-materials')
+              .move(att.path, newPath);
+            
+            const { data: urlData } = supabase.storage
+              .from('class-materials')
+              .getPublicUrl(newPath);
+
+            updatedAttachments.push({
+              ...att,
+              path: newPath,
+              url: urlData.publicUrl,
+            });
+          } catch {
+            updatedAttachments.push(att);
+          }
+        }
+
+        await supabase
+          .from('classwork_items')
+          .update({ attachments: updatedAttachments })
+          .eq('id', data.id);
+      }
+
       toast.success(`${type === 'assignment' ? 'Assignment' : 'Lesson'} created!`);
       form.reset();
+      setAttachments([]);
       setOpen(false);
       onClassworkCreated?.();
     } catch (error: any) {
@@ -110,6 +201,8 @@ export function CreateClassworkDialog({ classId, topics, onClassworkCreated }: C
 
   const handleOpen = (selectedType: 'lesson' | 'assignment') => {
     setType(selectedType);
+    setAttachments([]);
+    form.reset();
     setOpen(true);
   };
 
@@ -135,7 +228,7 @@ export function CreateClassworkDialog({ classId, topics, onClassworkCreated }: C
       </DropdownMenu>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {type === 'assignment' ? (
@@ -257,11 +350,68 @@ export function CreateClassworkDialog({ classId, topics, onClassworkCreated }: C
                 </div>
               )}
 
+              {/* Attachments */}
+              <div className="space-y-2">
+                <FormLabel>Attachments</FormLabel>
+                
+                {attachments.length > 0 && (
+                  <div className="space-y-2">
+                    {attachments.map((attachment, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="flex-1 truncate">{attachment.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeAttachment(index)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={uploading}
+                      asChild
+                    >
+                      <span>
+                        {uploading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        {uploading ? 'Uploading...' : 'Upload Files'}
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading || uploading}>
                   {loading ? 'Creating...' : 'Create'}
                 </Button>
               </div>
