@@ -19,6 +19,9 @@ import {
 } from '@/components/ui/accordion';
 import { CreateTopicDialog } from '@/components/classwork/CreateTopicDialog';
 import { CreateClassworkDialog } from '@/components/classwork/CreateClassworkDialog';
+import { EditClassDialog } from '@/components/class/EditClassDialog';
+import { DeleteClassDialog } from '@/components/class/DeleteClassDialog';
+import { AddTeacherDialog } from '@/components/class/AddTeacherDialog';
 
 interface ClassData {
   id: string;
@@ -31,6 +34,7 @@ interface ClassData {
   grade_level: string | null;
   grade_level_id: string | null;
   created_by: string | null;
+  school_id: string | null;
 }
 
 interface Topic {
@@ -170,6 +174,8 @@ export default function ClassDetails() {
         }));
 
         setMembers(membersList);
+      } else {
+        setMembers([]);
       }
 
       // Fetch available students (same grade level, not in class)
@@ -293,7 +299,8 @@ export default function ClassDetails() {
   const gradientClass = colorVariants[classData.color || 'green'] || colorVariants.green;
   const teachers = members.filter(m => m.role === 'teacher');
   const students = members.filter(m => m.role === 'student');
-  const canManage = isTeacher || isAdmin;
+  const canManage = isTeacher || isAdmin; // Can add students, manage classwork
+  const canEdit = isAdmin; // Can edit/delete class, add teachers
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -311,17 +318,29 @@ export default function ClassDetails() {
             {classData.section && <p className="mt-1 opacity-90">{classData.section}</p>}
             {classData.subject && <p className="text-sm opacity-80">{classData.subject}</p>}
           </div>
-          {canManage && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="gap-2 bg-white/20 text-white hover:bg-white/30"
-              onClick={copyClassCode}
-            >
-              <Copy className="h-4 w-4" />
-              Code: {classData.class_code}
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {canManage && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-2 bg-white/20 text-white hover:bg-white/30"
+                onClick={copyClassCode}
+              >
+                <Copy className="h-4 w-4" />
+                Code: {classData.class_code}
+              </Button>
+            )}
+            {canEdit && (
+              <>
+                <EditClassDialog 
+                  classId={classData.id} 
+                  classData={classData} 
+                  onClassUpdated={fetchClassData} 
+                />
+                <DeleteClassDialog classId={classData.id} className={classData.name} />
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -336,9 +355,9 @@ export default function ClassDetails() {
             <BookOpen className="h-4 w-4" />
             Classwork
           </TabsTrigger>
-          <TabsTrigger value="people" className="gap-2">
+          <TabsTrigger value="participants" className="gap-2">
             <Users className="h-4 w-4" />
-            People
+            Participants
           </TabsTrigger>
         </TabsList>
 
@@ -454,12 +473,20 @@ export default function ClassDetails() {
           </div>
         </TabsContent>
 
-        {/* People Tab */}
-        <TabsContent value="people" className="mt-6 space-y-6">
+        {/* Participants Tab */}
+        <TabsContent value="participants" className="mt-6 space-y-6">
           {/* Teachers */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-display text-lg">Teachers</CardTitle>
+              {canEdit && (
+                <AddTeacherDialog
+                  classId={classData.id}
+                  schoolId={classData.school_id}
+                  existingTeacherIds={teachers.map(t => t.id)}
+                  onTeacherAdded={fetchClassData}
+                />
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
               {teachers.length > 0 ? (
