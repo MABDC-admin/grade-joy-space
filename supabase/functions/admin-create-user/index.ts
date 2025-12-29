@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Create client to verify caller's auth
+    // Verify caller's auth using the token directly
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(
@@ -42,12 +42,9 @@ Deno.serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    })
-
-    // Verify caller is authenticated
-    const { data: { user: caller }, error: authError } = await userClient.auth.getUser()
+    
+    // Use admin client to verify the JWT token directly
+    const { data: { user: caller }, error: authError } = await adminClient.auth.getUser(token)
     if (authError || !caller) {
       console.error('Auth error:', authError)
       return new Response(
