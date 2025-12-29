@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react';
 import { ClassCard } from '@/components/dashboard/ClassCard';
 import { CreateClassDialog } from '@/components/dashboard/CreateClassDialog';
 import { JoinClassDialog } from '@/components/dashboard/JoinClassDialog';
+import { ProfileEditDialog } from '@/components/profile/ProfileEditDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSchool } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BookOpen, Calendar, Clock, ExternalLink } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { BookOpen, Calendar, Clock, ExternalLink, Bell, Megaphone, Pencil, GraduationCap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useUnreadContent } from '@/hooks/useUnreadContent';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 
 interface ClassData {
   id: string;
@@ -23,6 +27,8 @@ interface ClassData {
   school_id: string | null;
   studentCount?: number;
   assignmentCount?: number;
+  teacherName?: string;
+  teacherAvatar?: string | null;
 }
 
 interface UpcomingItem {
@@ -35,6 +41,15 @@ interface UpcomingItem {
   status?: string;
 }
 
+interface Announcement {
+  id: string;
+  content: string;
+  created_at: string;
+  class_name: string;
+  class_id: string;
+  author_name: string | null;
+}
+
 export default function Dashboard() {
   const { user, profile, isAdmin, isTeacher, isStudent } = useAuth();
   const { selectedSchoolId } = useSchool();
@@ -42,42 +57,111 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
 
   const fetchClassCounts = async (classIds: string[]): Promise<Map<string, { students: number; assignments: number }>> => {
     const countsMap = new Map<string, { students: number; assignments: number }>();
     
     if (classIds.length === 0) return countsMap;
 
-    // Fetch student counts
     const { data: memberCounts } = await supabase
       .from('class_members')
       .select('class_id')
       .in('class_id', classIds);
 
-    // Fetch assignment counts
     const { data: assignmentCounts } = await supabase
       .from('classwork_items')
       .select('class_id')
       .in('class_id', classIds)
       .eq('type', 'assignment');
 
-    // Initialize counts
     classIds.forEach(id => countsMap.set(id, { students: 0, assignments: 0 }));
 
-    // Count students per class
     memberCounts?.forEach(m => {
       const current = countsMap.get(m.class_id);
       if (current) current.students++;
     });
 
-    // Count assignments per class
     assignmentCounts?.forEach(a => {
       const current = countsMap.get(a.class_id);
       if (current) current.assignments++;
     });
 
     return countsMap;
+  };
+
+  const fetchTeacherInfo = async (classIds: string[]): Promise<Map<string, { name: string; avatar: string | null }>> => {
+    const teacherMap = new Map<string, { name: string; avatar: string | null }>();
+    if (classIds.length === 0) return teacherMap;
+
+    const { data: classTeachers } = await supabase
+      .from('class_teachers')
+      .select('class_id, teacher_id')
+      .in('class_id', classIds);
+
+    if (!classTeachers || classTeachers.length === 0) return teacherMap;
+
+    const teacherIds = [...new Set(classTeachers.map(ct => ct.teacher_id))];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, avatar_url')
+      .in('user_id', teacherIds);
+
+    const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+
+    classTeachers.forEach(ct => {
+      const teacherProfile = profileMap.get(ct.teacher_id);
+      if (teacherProfile && !teacherMap.has(ct.class_id)) {
+        teacherMap.set(ct.class_id, {
+          name: teacherProfile.full_name || 'Teacher',
+          avatar: teacherProfile.avatar_url,
+        });
+      }
+    });
+
+    return teacherMap;
+  };
+
+  const fetchAnnouncements = async (classIds: string[]) => {
+    if (classIds.length === 0) {
+      setAnnouncements([]);
+      return;
+    }
+
+    const { data } = await supabase
+      .from('announcements')
+      .select(`
+        id,
+        content,
+        created_at,
+        class_id,
+        author_id,
+        classes (name)
+      `)
+      .in('class_id', classIds)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (data) {
+      const authorIds = [...new Set(data.map((a: any) => a.author_id).filter(Boolean))];
+      const { data: authorProfiles } = authorIds.length > 0 
+        ? await supabase.from('profiles').select('user_id, full_name').in('user_id', authorIds)
+        : { data: [] };
+
+      const authorMap = new Map<string, string | null>();
+      authorProfiles?.forEach(p => authorMap.set(p.user_id, p.full_name));
+
+      setAnnouncements(data.map((a: any) => ({
+        id: a.id,
+        content: a.content,
+        created_at: a.created_at,
+        class_name: a.classes?.name || '',
+        class_id: a.class_id,
+        author_name: authorMap.get(a.author_id) || null,
+      })));
+    }
   };
 
   const fetchClasses = async () => {
@@ -106,8 +190,6 @@ export default function Dashboard() {
           }
           
           const { data } = await query;
-          
-          // Fetch counts for these classes
           const counts = await fetchClassCounts(data?.map(c => c.id) || []);
           
           setClasses((data || []).map(cls => ({
@@ -126,8 +208,6 @@ export default function Dashboard() {
           }
           
           const { data } = await query;
-          
-          // Fetch counts for these classes
           const counts = await fetchClassCounts(data?.map(c => c.id) || []);
           
           setClasses((data || []).map(cls => ({
@@ -135,6 +215,39 @@ export default function Dashboard() {
             studentCount: counts.get(cls.id)?.students || 0,
             assignmentCount: counts.get(cls.id)?.assignments || 0,
           })));
+        }
+
+        // Teacher/Admin upcoming items
+        const { data: items } = await supabase
+          .from('classwork_items')
+          .select(`
+            id,
+            title,
+            due_date,
+            type,
+            class_id,
+            classes (name, school_id)
+          `)
+          .eq('type', 'assignment')
+          .gte('due_date', new Date().toISOString())
+          .order('due_date', { ascending: true })
+          .limit(5);
+
+        if (items) {
+          const filteredItems = effectiveSchoolId
+            ? items.filter((item: any) => item.classes?.school_id === effectiveSchoolId)
+            : items;
+          
+          setUpcomingItems(
+            filteredItems.map((item: any) => ({
+              id: item.id,
+              title: item.title,
+              due_date: item.due_date,
+              class_name: item.classes?.name || '',
+              class_id: item.class_id,
+              type: item.type,
+            }))
+          );
         }
       } else {
         // Students see classes they joined
@@ -156,56 +269,25 @@ export default function Dashboard() {
           }
           
           const { data } = await query;
-          
-          // Fetch counts for these classes
           const counts = await fetchClassCounts(data?.map(c => c.id) || []);
+          const teacherInfo = await fetchTeacherInfo(data?.map(c => c.id) || []);
           
           setClasses((data || []).map(cls => ({
             ...cls,
             studentCount: counts.get(cls.id)?.students || 0,
             assignmentCount: counts.get(cls.id)?.assignments || 0,
+            teacherName: teacherInfo.get(cls.id)?.name,
+            teacherAvatar: teacherInfo.get(cls.id)?.avatar,
           })));
 
-          // For students, fetch upcoming assignments from their enrolled classes
           await fetchUpcomingForStudent(classIds);
+          await fetchAnnouncements(classIds);
         } else {
           setClasses([]);
           setUpcomingItems([]);
+          setAnnouncements([]);
         }
         return;
-      }
-
-      // For teachers/admins, fetch general upcoming
-      const { data: items } = await supabase
-        .from('classwork_items')
-        .select(`
-          id,
-          title,
-          due_date,
-          type,
-          class_id,
-          classes (name, school_id)
-        `)
-        .eq('type', 'assignment')
-        .gte('due_date', new Date().toISOString())
-        .order('due_date', { ascending: true })
-        .limit(5);
-
-      if (items) {
-        const filteredItems = effectiveSchoolId
-          ? items.filter((item: any) => item.classes?.school_id === effectiveSchoolId)
-          : items;
-        
-        setUpcomingItems(
-          filteredItems.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            due_date: item.due_date,
-            class_name: item.classes?.name || '',
-            class_id: item.class_id,
-            type: item.type,
-          }))
-        );
       }
     } catch (error) {
       console.error('Error fetching classes:', error);
@@ -221,7 +303,6 @@ export default function Dashboard() {
     }
 
     try {
-      // Get assignments from enrolled classes
       const { data: assignments } = await supabase
         .from('classwork_items')
         .select(`
@@ -243,7 +324,6 @@ export default function Dashboard() {
         return;
       }
 
-      // Get submission status for each assignment
       const { data: submissions } = await supabase
         .from('submissions')
         .select('assignment_id, status')
@@ -303,6 +383,205 @@ export default function Dashboard() {
     return null;
   };
 
+  const getInitials = (name: string | null) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Student Dashboard Layout
+  if (isStudent) {
+    return (
+      <div className="animate-fade-in space-y-6">
+        {/* Student Profile Card */}
+        <Card className="overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-16 w-16 border-2 border-background shadow-lg">
+                <AvatarImage src={profile?.avatar_url || undefined} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+                  {getInitials(profile?.full_name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-display text-xl font-medium truncate">
+                  {profile?.full_name || 'Student'}
+                </h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="secondary" className="gap-1">
+                    <GraduationCap className="h-3 w-3" />
+                    {profile?.grade_level || 'Student'}
+                  </Badge>
+                  {profile?.section && (
+                    <Badge variant="outline">{profile.section}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setProfileEditOpen(true)}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+                <JoinClassDialog onClassJoined={fetchClasses} />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <Card className="p-4 text-center">
+                <p className="text-2xl font-bold text-primary">{classes.length}</p>
+                <p className="text-xs text-muted-foreground">Enrolled Classes</p>
+              </Card>
+              <Card className="p-4 text-center">
+                <p className="text-2xl font-bold text-orange-500">{upcomingItems.length}</p>
+                <p className="text-xs text-muted-foreground">Upcoming Tasks</p>
+              </Card>
+              <Card className="p-4 text-center">
+                <p className="text-2xl font-bold text-blue-500">{unreadCounts.announcements}</p>
+                <p className="text-xs text-muted-foreground">New Updates</p>
+              </Card>
+            </div>
+
+            {/* Upcoming Assignments */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Calendar className="h-4 w-4 text-primary" />
+                  Upcoming Assignments
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-14" />)}
+                  </div>
+                ) : upcomingItems.length > 0 ? (
+                  upcomingItems.slice(0, 5).map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => navigate(`/assignment/${item.id}`)}
+                      className="w-full flex items-start justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 text-left group"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium group-hover:text-primary transition-colors">
+                            {item.title}
+                          </p>
+                          {getStatusBadge(item.status, item.due_date)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{item.class_name}</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs ml-2 shrink-0">
+                        <Clock className="mr-1 h-3 w-3" />
+                        {formatDate(item.due_date)}
+                      </Badge>
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground py-4">
+                    No upcoming assignments
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Recent Announcements */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Megaphone className="h-4 w-4 text-primary" />
+                  Recent Announcements
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2].map(i => <Skeleton key={i} className="h-16" />)}
+                  </div>
+                ) : announcements.length > 0 ? (
+                  announcements.slice(0, 3).map((announcement) => (
+                    <button
+                      key={announcement.id}
+                      onClick={() => navigate(`/class/${announcement.class_id}`)}
+                      className="w-full text-left rounded-lg border p-3 hover:bg-muted/50 transition-colors group"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-primary">{announcement.class_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(announcement.created_at), 'MMM d')}
+                        </span>
+                      </div>
+                      <p className="text-sm line-clamp-2">{announcement.content}</p>
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground py-4">
+                    No announcements yet
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Sidebar - Recent Notifications */}
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bell className="h-4 w-4 text-primary" />
+                  Notifications
+                  {unreadCounts.classwork + unreadCounts.announcements > 0 && (
+                    <Badge variant="destructive" className="ml-auto">
+                      {unreadCounts.classwork + unreadCounts.announcements}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {unreadCounts.classwork > 0 || unreadCounts.announcements > 0 ? (
+                  <div className="space-y-2">
+                    {unreadCounts.classwork > 0 && (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-primary/5">
+                        <span className="text-sm">New classwork</span>
+                        <Badge variant="secondary">{unreadCounts.classwork}</Badge>
+                      </div>
+                    )}
+                    {unreadCounts.announcements > 0 && (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-primary/5">
+                        <span className="text-sm">New announcements</span>
+                        <Badge variant="secondary">{unreadCounts.announcements}</Badge>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground py-4">
+                    You're all caught up!
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <ProfileEditDialog 
+          open={profileEditOpen} 
+          onOpenChange={setProfileEditOpen}
+          onProfileUpdated={fetchClasses}
+        />
+      </div>
+    );
+  }
+
+  // Teacher/Admin Dashboard (original layout)
   return (
     <div className="animate-fade-in space-y-6">
       {/* Header */}
@@ -310,11 +589,10 @@ export default function Dashboard() {
         <div>
           <h1 className="font-display text-2xl font-medium">My Classes</h1>
           <p className="text-sm text-muted-foreground">
-            {isAdmin ? 'Manage your classes' : isTeacher ? 'View and manage your assigned classes' : 'View your enrolled classes'}
+            {isAdmin ? 'Manage your classes' : 'View and manage your assigned classes'}
           </p>
         </div>
         <div className="flex gap-2">
-          {isStudent && <JoinClassDialog onClassJoined={fetchClasses} />}
           {isAdmin && <CreateClassDialog onClassCreated={fetchClasses} />}
         </div>
       </div>
@@ -358,9 +636,7 @@ export default function Dashboard() {
               <BookOpen className="h-12 w-12 text-muted-foreground/50" />
               <h3 className="mt-4 font-display text-lg font-medium">No classes yet</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                {isTeacher || isAdmin
-                  ? 'Create your first class to get started'
-                  : 'Join a class using the class code from your teacher'}
+                Create your first class to get started
               </p>
             </Card>
           )}
@@ -368,7 +644,6 @@ export default function Dashboard() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {/* Upcoming */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -410,7 +685,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Recent Activity</CardTitle>
