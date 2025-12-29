@@ -22,6 +22,8 @@ interface ClassCardProps {
   assignmentCount?: number;
   color?: string;
   classCode?: string;
+  hasNewAnnouncement?: boolean;
+  unreadCount?: number;
 }
 
 const colorVariants: Record<string, string> = {
@@ -43,22 +45,34 @@ export function ClassCard({
   assignmentCount = 0,
   color = 'green',
   classCode,
+  hasNewAnnouncement = false,
+  unreadCount = 0,
 }: ClassCardProps) {
   const navigate = useNavigate();
   const gradientClass = colorVariants[color] || colorVariants.green;
 
   return (
     <Card 
-      className="group cursor-pointer overflow-hidden shadow-card transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+      className={cn(
+        "group cursor-pointer overflow-hidden shadow-card transition-all duration-200 hover:-translate-y-1 hover:shadow-lg",
+        hasNewAnnouncement && "animate-pulse-glow"
+      )}
       onClick={() => navigate(`/class/${id}`)}
     >
       {/* Header with gradient */}
       <div className={cn('relative h-24 p-4', gradientClass)}>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <h3 className="truncate font-display text-lg font-medium text-white">
-              {name}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="truncate font-display text-lg font-medium text-white">
+                {name}
+              </h3>
+              {unreadCount > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </div>
             {section && (
               <p className="truncate text-sm text-white/80">{section}</p>
             )}

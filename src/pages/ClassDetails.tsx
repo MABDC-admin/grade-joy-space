@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Copy, FileText, BookOpen, Users, UserPlus, Loader2, MoreVertical, Pencil, Trash2, ChevronDown, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, BookOpen, Users, UserPlus, Loader2, MoreVertical, Pencil, Trash2, ChevronDown, ExternalLink, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -33,6 +33,8 @@ import { EditClassworkDialog } from '@/components/classwork/EditClassworkDialog'
 import { DeleteClassworkDialog } from '@/components/classwork/DeleteClassworkDialog';
 import { FileGrid } from '@/components/classwork/FileGrid';
 import { FilePreviewDialog } from '@/components/ui/file-preview-dialog';
+import { ClassSettingsDialog } from '@/components/class/ClassSettingsDialog';
+import { ClassAnnouncementBanner } from '@/components/class/ClassAnnouncementBanner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +54,7 @@ interface ClassData {
   grade_level_id: string | null;
   created_by: string | null;
   school_id: string | null;
+  banner_url?: string | null;
 }
 
 interface Topic {
@@ -125,6 +128,9 @@ export default function ClassDetails() {
   // Classwork edit/delete state
   const [editClassworkDialog, setEditClassworkDialog] = useState<{ open: boolean; item: ClassworkItem | null }>({ open: false, item: null });
   const [deleteClassworkDialog, setDeleteClassworkDialog] = useState<{ open: boolean; item: ClassworkItem | null }>({ open: false, item: null });
+  
+  // Settings dialog state
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   useEffect(() => {
     if (classId) {
@@ -364,8 +370,15 @@ export default function ClassDetails() {
       </Button>
 
       {/* Class header */}
-      <div className={cn('rounded-lg p-6 text-primary-foreground', gradientClass)}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div 
+        className={cn('rounded-lg p-6 text-primary-foreground relative overflow-hidden', gradientClass)}
+        style={classData.banner_url ? { 
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${classData.banner_url})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        } : undefined}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between relative z-10">
           <div>
             <h1 className="font-display text-2xl font-medium">{classData.name}</h1>
             {classData.section && <p className="mt-1 opacity-90">{classData.section}</p>}
@@ -373,29 +386,35 @@ export default function ClassDetails() {
           </div>
           <div className="flex flex-wrap gap-2">
             {canManage && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="gap-2 bg-white/20 text-white hover:bg-white/30"
-                onClick={copyClassCode}
-              >
-                <Copy className="h-4 w-4" />
-                Code: {classData.class_code}
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-2 bg-white/20 text-white hover:bg-white/30"
+                  onClick={copyClassCode}
+                >
+                  <Copy className="h-4 w-4" />
+                  Code: {classData.class_code}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="bg-white/20 text-white hover:bg-white/30"
+                  onClick={() => setSettingsDialogOpen(true)}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </>
             )}
             {canEdit && (
-              <>
-                <EditClassDialog 
-                  classId={classData.id} 
-                  classData={classData} 
-                  onClassUpdated={fetchClassData} 
-                />
-                <DeleteClassDialog classId={classData.id} className={classData.name} />
-              </>
+              <DeleteClassDialog classId={classData.id} className={classData.name} />
             )}
           </div>
         </div>
       </div>
+
+      {/* Announcement Banner for Students */}
+      <ClassAnnouncementBanner classId={classData.id} />
 
       {/* Tabs */}
       <Tabs defaultValue="classwork" className="w-full">
@@ -758,6 +777,16 @@ export default function ClassDetails() {
         onOpenChange={(open) => !open && setPreviewFile(null)}
         file={previewFile}
       />
+
+      {/* Class Settings Dialog */}
+      {classData && (
+        <ClassSettingsDialog
+          open={settingsDialogOpen}
+          onOpenChange={setSettingsDialogOpen}
+          classData={classData}
+          onUpdate={fetchClassData}
+        />
+      )}
     </div>
   );
 }
