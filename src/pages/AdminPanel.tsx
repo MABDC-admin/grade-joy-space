@@ -33,7 +33,8 @@ import {
   Building2,
   GraduationCap,
   School,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { CreateSchoolDialog } from '@/components/admin/CreateSchoolDialog';
 import { CreateTeacherDialog } from '@/components/admin/CreateTeacherDialog';
@@ -93,6 +94,13 @@ export default function AdminPanel() {
     role: 'admin' | 'teacher' | 'student';
     action: 'add' | 'remove';
   } | null>(null);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    open: boolean;
+    userId: string;
+    userName: string;
+    userEmail: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (isAdmin) {
@@ -216,6 +224,38 @@ export default function AdminPanel() {
       toast.error(error.message || 'Failed to update role');
     } finally {
       setRoleConfirmDialog(null);
+    }
+  };
+
+  const openDeleteConfirmDialog = (userId: string, userName: string, userEmail: string) => {
+    setDeleteConfirmDialog({
+      open: true,
+      userId,
+      userName,
+      userEmail,
+    });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteConfirmDialog) return;
+    
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+        body: { user_id: deleteConfirmDialog.userId }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('User deleted successfully');
+      fetchData();
+    } catch (error: any) {
+      console.error('Delete user error:', error);
+      toast.error(error.message || 'Failed to delete user');
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmDialog(null);
     }
   };
 
@@ -451,6 +491,18 @@ export default function AdminPanel() {
                         >
                           Admin
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => openDeleteConfirmDialog(
+                            user.user_id,
+                            user.full_name || 'Teacher',
+                            user.email
+                          )}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -533,6 +585,18 @@ export default function AdminPanel() {
                             {user.school_name}
                           </Badge>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => openDeleteConfirmDialog(
+                            user.user_id,
+                            user.full_name || 'Student',
+                            user.email
+                          )}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -619,6 +683,36 @@ export default function AdminPanel() {
               className={roleConfirmDialog?.action === 'remove' ? 'bg-destructive hover:bg-destructive/90' : ''}
             >
               {roleConfirmDialog?.action === 'remove' ? 'Remove Role' : 'Add Role'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog 
+        open={deleteConfirmDialog?.open ?? false} 
+        onOpenChange={(open) => !open && setDeleteConfirmDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User Account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete the account for{' '}
+              <strong>{deleteConfirmDialog?.userName}</strong> ({deleteConfirmDialog?.userEmail})?
+              <br /><br />
+              <span className="text-destructive font-medium">
+                This action cannot be undone. All user data will be permanently removed.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteUser}
+              disabled={deleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {deleting ? 'Deleting...' : 'Delete User'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
