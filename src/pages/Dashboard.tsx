@@ -163,12 +163,12 @@ export default function Dashboard() {
         <div>
           <h1 className="font-display text-2xl font-medium">My Classes</h1>
           <p className="text-sm text-muted-foreground">
-            {isTeacher || isAdmin ? 'Manage your classes' : 'View your enrolled classes'}
+            {isAdmin ? 'Manage your classes' : isTeacher ? 'View and manage your assigned classes' : 'View your enrolled classes'}
           </p>
         </div>
         <div className="flex gap-2">
           {isStudent && <JoinClassDialog onClassJoined={fetchClasses} />}
-          {(isTeacher || isAdmin) && <CreateClassDialog onClassCreated={fetchClasses} />}
+          {isAdmin && <CreateClassDialog onClassCreated={fetchClasses} />}
         </div>
       </div>
 
