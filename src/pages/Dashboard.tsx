@@ -17,6 +17,7 @@ interface ClassData {
   color: string | null;
   class_code: string;
   created_by: string | null;
+  school_id: string | null;
 }
 
 interface UpcomingItem {
@@ -28,7 +29,7 @@ interface UpcomingItem {
 }
 
 export default function Dashboard() {
-  const { user, isAdmin, isTeacher, isStudent } = useAuth();
+  const { user, profile, isAdmin, isTeacher, isStudent } = useAuth();
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +39,8 @@ export default function Dashboard() {
 
     setLoading(true);
     try {
+      const userSchoolId = profile?.school_id;
+
       // Fetch classes based on role
       if (isAdmin || isTeacher) {
         // Teachers see classes they created or teach
@@ -49,17 +52,30 @@ export default function Dashboard() {
         const classIds = teachingClasses?.map(c => c.class_id) || [];
 
         if (classIds.length > 0) {
-          const { data } = await supabase
+          let query = supabase
             .from('classes')
             .select('*')
             .in('id', classIds);
+          
+          // Filter by school if user has a school assigned (non-admin users)
+          if (userSchoolId && !isAdmin) {
+            query = query.eq('school_id', userSchoolId);
+          }
+          
+          const { data } = await query;
           setClasses(data || []);
         } else {
           // Also check created_by
-          const { data } = await supabase
+          let query = supabase
             .from('classes')
             .select('*')
             .eq('created_by', user.id);
+          
+          if (userSchoolId && !isAdmin) {
+            query = query.eq('school_id', userSchoolId);
+          }
+          
+          const { data } = await query;
           setClasses(data || []);
         }
       } else {
@@ -72,17 +88,24 @@ export default function Dashboard() {
         const classIds = memberClasses?.map(c => c.class_id) || [];
 
         if (classIds.length > 0) {
-          const { data } = await supabase
+          let query = supabase
             .from('classes')
             .select('*')
             .in('id', classIds);
+          
+          // Filter by school if user has a school assigned
+          if (userSchoolId) {
+            query = query.eq('school_id', userSchoolId);
+          }
+          
+          const { data } = await query;
           setClasses(data || []);
         } else {
           setClasses([]);
         }
       }
 
-      // Fetch upcoming assignments
+      // Fetch upcoming assignments (only from user's classes)
       const { data: items } = await supabase
         .from('classwork_items')
         .select(`
@@ -90,7 +113,7 @@ export default function Dashboard() {
           title,
           due_date,
           type,
-          classes (name)
+          classes (name, school_id)
         `)
         .eq('type', 'assignment')
         .gte('due_date', new Date().toISOString())
@@ -98,8 +121,13 @@ export default function Dashboard() {
         .limit(5);
 
       if (items) {
+        // Filter items by user's school
+        const filteredItems = userSchoolId && !isAdmin
+          ? items.filter((item: any) => item.classes?.school_id === userSchoolId)
+          : items;
+        
         setUpcomingItems(
-          items.map((item: any) => ({
+          filteredItems.map((item: any) => ({
             id: item.id,
             title: item.title,
             due_date: item.due_date,
@@ -117,7 +145,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchClasses();
-  }, [user, isAdmin, isTeacher]);
+  }, [user, profile, isAdmin, isTeacher]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'No due date';
