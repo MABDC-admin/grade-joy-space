@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList, UserPlus, Loader2 } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList, UserPlus, Loader2, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -22,6 +22,16 @@ import { CreateClassworkDialog } from '@/components/classwork/CreateClassworkDia
 import { EditClassDialog } from '@/components/class/EditClassDialog';
 import { DeleteClassDialog } from '@/components/class/DeleteClassDialog';
 import { AddTeacherDialog } from '@/components/class/AddTeacherDialog';
+import { EditTopicDialog } from '@/components/classwork/EditTopicDialog';
+import { DeleteTopicDialog } from '@/components/classwork/DeleteTopicDialog';
+import { EditClassworkDialog } from '@/components/classwork/EditClassworkDialog';
+import { DeleteClassworkDialog } from '@/components/classwork/DeleteClassworkDialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface ClassData {
   id: string;
@@ -43,6 +53,7 @@ interface Topic {
   order_index: number;
   class_id?: string;
   created_at?: string;
+  color: string;
   items: ClassworkItem[];
 }
 
@@ -54,6 +65,8 @@ interface ClassworkItem {
   due_date: string | null;
   points: number | null;
   order_index: number;
+  topic_id: string | null;
+  attachments: any[] | null;
 }
 
 interface Member {
@@ -89,6 +102,14 @@ export default function ClassDetails() {
   const [availableStudents, setAvailableStudents] = useState<AvailableStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingStudentId, setAddingStudentId] = useState<string | null>(null);
+  
+  // Topic edit/delete state
+  const [editTopicDialog, setEditTopicDialog] = useState<{ open: boolean; topic: Topic | null }>({ open: false, topic: null });
+  const [deleteTopicDialog, setDeleteTopicDialog] = useState<{ open: boolean; topic: Topic | null }>({ open: false, topic: null });
+  
+  // Classwork edit/delete state
+  const [editClassworkDialog, setEditClassworkDialog] = useState<{ open: boolean; item: ClassworkItem | null }>({ open: false, item: null });
+  const [deleteClassworkDialog, setDeleteClassworkDialog] = useState<{ open: boolean; item: ClassworkItem | null }>({ open: false, item: null });
 
   useEffect(() => {
     if (classId) {
@@ -138,6 +159,7 @@ export default function ClassDetails() {
           order_index: -1,
           class_id: classId,
           created_at: new Date().toISOString(),
+          color: 'gray',
           items: uncategorizedItems,
         });
       }
@@ -414,50 +436,108 @@ export default function ClassDetails() {
 
             {topics.length > 0 ? (
               <Accordion type="multiple" className="space-y-2">
-                {topics.map((topic) => (
-                  <AccordionItem key={topic.id} value={topic.id} className="border rounded-lg">
-                    <AccordionTrigger className="px-4 hover:no-underline">
-                      <span className="font-display font-medium">{topic.name}</span>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-4">
-                      {topic.items.length > 0 ? (
-                        <div className="space-y-2">
-                          {topic.items.map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => item.type === 'assignment' && navigate(`/assignment/${item.id}`)}
-                              className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 cursor-pointer"
-                            >
-                              <div className={cn(
-                                "flex h-10 w-10 items-center justify-center rounded-full",
-                                item.type === 'assignment' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-                              )}>
-                                {item.type === 'assignment' ? (
-                                  <FileText className="h-5 w-5" />
-                                ) : (
-                                  <BookOpen className="h-5 w-5" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate">{item.title}</p>
-                                {item.due_date && (
-                                  <p className="text-sm text-muted-foreground">
-                                    Due {formatDate(item.due_date)}
-                                  </p>
-                                )}
-                              </div>
-                              {item.points && (
-                                <Badge variant="outline">{item.points} pts</Badge>
-                              )}
-                            </div>
-                          ))}
+                {topics.map((topic) => {
+                  const topicColorClass = topic.color ? `bg-${topic.color}-500` : 'bg-blue-500';
+                  return (
+                    <AccordionItem key={topic.id} value={topic.id} className="border rounded-lg overflow-hidden">
+                      <div className={cn("h-2", topicColorClass)} />
+                      <AccordionTrigger className="px-4 hover:no-underline">
+                        <div className="flex items-center justify-between flex-1 pr-2">
+                          <span className="font-display font-medium">{topic.name}</span>
+                          {canManage && topic.id !== 'uncategorized' && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenuItem onClick={() => setEditTopicDialog({ open: true, topic })}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => setDeleteTopicDialog({ open: true, topic })}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No items in this topic</p>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pb-4">
+                        {topic.items.length > 0 ? (
+                          <div className="space-y-2">
+                            {topic.items.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                              >
+                                <div 
+                                  onClick={() => item.type === 'assignment' && navigate(`/assignment/${item.id}`)}
+                                  className={cn(
+                                    "flex h-10 w-10 items-center justify-center rounded-full cursor-pointer",
+                                    item.type === 'assignment' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
+                                  )}
+                                >
+                                  {item.type === 'assignment' ? (
+                                    <FileText className="h-5 w-5" />
+                                  ) : (
+                                    <BookOpen className="h-5 w-5" />
+                                  )}
+                                </div>
+                                <div 
+                                  className="flex-1 min-w-0 cursor-pointer"
+                                  onClick={() => item.type === 'assignment' && navigate(`/assignment/${item.id}`)}
+                                >
+                                  <p className="font-medium truncate">{item.title}</p>
+                                  {item.due_date && (
+                                    <p className="text-sm text-muted-foreground">
+                                      Due {formatDate(item.due_date)}
+                                    </p>
+                                  )}
+                                </div>
+                                {item.points && (
+                                  <Badge variant="outline">{item.points} pts</Badge>
+                                )}
+                                {item.attachments && item.attachments.length > 0 && (
+                                  <Badge variant="secondary">{item.attachments.length} file(s)</Badge>
+                                )}
+                                {canManage && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => setEditClassworkDialog({ open: true, item })}>
+                                        <Pencil className="h-4 w-4 mr-2" />
+                                        Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        className="text-destructive"
+                                        onClick={() => setDeleteClassworkDialog({ open: true, item })}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No items in this topic</p>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
               </Accordion>
             ) : (
               <Card className="flex flex-col items-center justify-center py-12">
@@ -471,6 +551,43 @@ export default function ClassDetails() {
               </Card>
             )}
           </div>
+
+          {/* Topic Dialogs */}
+          {editTopicDialog.topic && (
+            <EditTopicDialog
+              open={editTopicDialog.open}
+              onOpenChange={(open) => setEditTopicDialog({ open, topic: open ? editTopicDialog.topic : null })}
+              topic={editTopicDialog.topic}
+              onTopicUpdated={fetchClassData}
+            />
+          )}
+          {deleteTopicDialog.topic && (
+            <DeleteTopicDialog
+              open={deleteTopicDialog.open}
+              onOpenChange={(open) => setDeleteTopicDialog({ open, topic: open ? deleteTopicDialog.topic : null })}
+              topic={deleteTopicDialog.topic}
+              onTopicDeleted={fetchClassData}
+            />
+          )}
+
+          {/* Classwork Dialogs */}
+          {editClassworkDialog.item && (
+            <EditClassworkDialog
+              open={editClassworkDialog.open}
+              onOpenChange={(open) => setEditClassworkDialog({ open, item: open ? editClassworkDialog.item : null })}
+              item={editClassworkDialog.item}
+              topics={topics.filter(t => t.id !== 'uncategorized')}
+              onClassworkUpdated={fetchClassData}
+            />
+          )}
+          {deleteClassworkDialog.item && (
+            <DeleteClassworkDialog
+              open={deleteClassworkDialog.open}
+              onOpenChange={(open) => setDeleteClassworkDialog({ open, item: open ? deleteClassworkDialog.item : null })}
+              item={deleteClassworkDialog.item}
+              onClassworkDeleted={fetchClassData}
+            />
+          )}
         </TabsContent>
 
         {/* Participants Tab */}

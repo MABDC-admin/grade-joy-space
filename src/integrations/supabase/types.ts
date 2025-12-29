@@ -446,6 +446,7 @@ export type Database = {
       topics: {
         Row: {
           class_id: string
+          color: string | null
           created_at: string
           id: string
           name: string
@@ -453,6 +454,7 @@ export type Database = {
         }
         Insert: {
           class_id: string
+          color?: string | null
           created_at?: string
           id?: string
           name: string
@@ -460,6 +462,7 @@ export type Database = {
         }
         Update: {
           class_id?: string
+          color?: string | null
           created_at?: string
           id?: string
           name?: string

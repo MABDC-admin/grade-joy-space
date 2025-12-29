@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,7 +8,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +19,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { FolderPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -43,57 +41,67 @@ const colorOptions = [
   { value: 'yellow', label: 'Yellow', class: 'bg-yellow-500' },
 ];
 
-interface CreateTopicDialogProps {
-  classId: string;
-  onTopicCreated?: () => void;
+interface EditTopicDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  topic: {
+    id: string;
+    name: string;
+    color: string;
+  };
+  onTopicUpdated?: () => void;
 }
 
-export function CreateTopicDialog({ classId, onTopicCreated }: CreateTopicDialogProps) {
-  const [open, setOpen] = useState(false);
+export function EditTopicDialog({ open, onOpenChange, topic, onTopicUpdated }: EditTopicDialogProps) {
   const [loading, setLoading] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: '', color: 'blue' },
+    defaultValues: { 
+      name: topic.name,
+      color: topic.color || 'blue',
+    },
   });
+
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: topic.name,
+        color: topic.color || 'blue',
+      });
+    }
+  }, [open, topic, form]);
 
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
       const { error } = await supabase
         .from('topics')
-        .insert({
-          class_id: classId,
+        .update({
           name: values.name.trim(),
           color: values.color,
-        });
+        })
+        .eq('id', topic.id);
 
       if (error) throw error;
 
-      toast.success('Topic created!');
-      form.reset();
-      setOpen(false);
-      onTopicCreated?.();
+      toast.success('Topic updated!');
+      onOpenChange(false);
+      onTopicUpdated?.();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create topic');
+      toast.error(error.message || 'Failed to update topic');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <FolderPlus className="h-4 w-4" />
-          Add Topic
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Topic</DialogTitle>
+          <DialogTitle>Edit Topic</DialogTitle>
           <DialogDescription>
-            Topics help organize your classwork into sections.
+            Update the topic name and color.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -143,11 +151,11 @@ export function CreateTopicDialog({ classId, onTopicCreated }: CreateTopicDialog
             />
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Create Topic'}
+                {loading ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
           </form>
