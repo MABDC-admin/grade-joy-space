@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList, UserPlus, Loader2, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, BookOpen, Users, UserPlus, Loader2, MoreVertical, Pencil, Trash2, ChevronDown, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -17,6 +17,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { CreateTopicDialog } from '@/components/classwork/CreateTopicDialog';
 import { CreateClassworkDialog } from '@/components/classwork/CreateClassworkDialog';
 import { EditClassDialog } from '@/components/class/EditClassDialog';
@@ -26,6 +31,8 @@ import { EditTopicDialog } from '@/components/classwork/EditTopicDialog';
 import { DeleteTopicDialog } from '@/components/classwork/DeleteTopicDialog';
 import { EditClassworkDialog } from '@/components/classwork/EditClassworkDialog';
 import { DeleteClassworkDialog } from '@/components/classwork/DeleteClassworkDialog';
+import { FileGrid } from '@/components/classwork/FileGrid';
+import { FilePreviewDialog } from '@/components/ui/file-preview-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +91,12 @@ interface AvailableStudent {
   avatar_url: string | null;
 }
 
+interface PreviewFile {
+  url: string;
+  name: string;
+  type?: string;
+}
+
 const colorVariants: Record<string, string> = {
   green: 'class-card-gradient-green',
   blue: 'class-card-gradient-blue',
@@ -102,6 +115,8 @@ export default function ClassDetails() {
   const [availableStudents, setAvailableStudents] = useState<AvailableStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingStudentId, setAddingStudentId] = useState<string | null>(null);
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
   
   // Topic edit/delete state
   const [editTopicDialog, setEditTopicDialog] = useState<{ open: boolean; topic: Topic | null }>({ open: false, topic: null });
@@ -297,6 +312,22 @@ export default function ClassDetails() {
     });
   };
 
+  const toggleItemExpanded = (itemId: string) => {
+    setExpandedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const getAttachments = (item: ClassworkItem) => {
+    return (item.attachments || []).map((att: any) => ({
+      url: att.url || att.file_url,
+      name: att.name || att.file_name || 'File',
+      type: att.type || att.file_type,
+    }));
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -321,8 +352,8 @@ export default function ClassDetails() {
   const gradientClass = colorVariants[classData.color || 'green'] || colorVariants.green;
   const teachers = members.filter(m => m.role === 'teacher');
   const students = members.filter(m => m.role === 'student');
-  const canManage = isTeacher || isAdmin; // Can add students, manage classwork
-  const canEdit = isAdmin; // Can edit/delete class, add teachers
+  const canManage = isTeacher || isAdmin;
+  const canEdit = isAdmin;
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -367,12 +398,8 @@ export default function ClassDetails() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="stream" className="w-full">
+      <Tabs defaultValue="classwork" className="w-full">
         <TabsList>
-          <TabsTrigger value="stream" className="gap-2">
-            <ClipboardList className="h-4 w-4" />
-            Stream
-          </TabsTrigger>
           <TabsTrigger value="classwork" className="gap-2">
             <BookOpen className="h-4 w-4" />
             Classwork
@@ -382,43 +409,6 @@ export default function ClassDetails() {
             Participants
           </TabsTrigger>
         </TabsList>
-
-        {/* Stream Tab */}
-        <TabsContent value="stream" className="mt-6">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-4">
-              {/* Announcement input */}
-              {canManage && (
-                <Card className="cursor-pointer transition-shadow hover:shadow-md">
-                  <CardContent className="flex items-center gap-4 py-4">
-                    <Avatar>
-                      <AvatarFallback>+</AvatarFallback>
-                    </Avatar>
-                    <p className="text-muted-foreground">Announce something to your class...</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card className="flex flex-col items-center justify-center py-12">
-                <p className="text-muted-foreground">No announcements yet</p>
-              </Card>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Upcoming</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-center text-sm text-muted-foreground py-4">
-                    No work due soon
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
 
         {/* Classwork Tab */}
         <TabsContent value="classwork" className="mt-6">
@@ -471,65 +461,118 @@ export default function ClassDetails() {
                       <AccordionContent className="px-4 pb-4">
                         {topic.items.length > 0 ? (
                           <div className="space-y-2">
-                            {topic.items.map((item) => (
-                              <div
-                                key={item.id}
-                                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-                              >
-                                <div 
-                                  onClick={() => item.type === 'assignment' && navigate(`/assignment/${item.id}`)}
-                                  className={cn(
-                                    "flex h-10 w-10 items-center justify-center rounded-full cursor-pointer",
-                                    item.type === 'assignment' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-                                  )}
+                            {topic.items.map((item) => {
+                              const isExpanded = expandedItems.includes(item.id);
+                              const attachments = getAttachments(item);
+                              
+                              return (
+                                <Collapsible 
+                                  key={item.id} 
+                                  open={isExpanded}
+                                  onOpenChange={() => toggleItemExpanded(item.id)}
                                 >
-                                  {item.type === 'assignment' ? (
-                                    <FileText className="h-5 w-5" />
-                                  ) : (
-                                    <BookOpen className="h-5 w-5" />
-                                  )}
-                                </div>
-                                <div 
-                                  className="flex-1 min-w-0 cursor-pointer"
-                                  onClick={() => item.type === 'assignment' && navigate(`/assignment/${item.id}`)}
-                                >
-                                  <p className="font-medium truncate">{item.title}</p>
-                                  {item.due_date && (
-                                    <p className="text-sm text-muted-foreground">
-                                      Due {formatDate(item.due_date)}
-                                    </p>
-                                  )}
-                                </div>
-                                {item.points && (
-                                  <Badge variant="outline">{item.points} pts</Badge>
-                                )}
-                                {item.attachments && item.attachments.length > 0 && (
-                                  <Badge variant="secondary">{item.attachments.length} file(s)</Badge>
-                                )}
-                                {canManage && (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => setEditClassworkDialog({ open: true, item })}>
-                                        <Pencil className="h-4 w-4 mr-2" />
-                                        Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem 
-                                        className="text-destructive"
-                                        onClick={() => setDeleteClassworkDialog({ open: true, item })}
-                                      >
-                                        <Trash2 className="h-4 w-4 mr-2" />
-                                        Delete
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                )}
-                              </div>
-                            ))}
+                                  <div className="rounded-lg border overflow-hidden">
+                                    <CollapsibleTrigger asChild>
+                                      <div className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/50 cursor-pointer">
+                                        <div 
+                                          className={cn(
+                                            "flex h-10 w-10 items-center justify-center rounded-full shrink-0",
+                                            item.type === 'assignment' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
+                                          )}
+                                        >
+                                          {item.type === 'assignment' ? (
+                                            <FileText className="h-5 w-5" />
+                                          ) : (
+                                            <BookOpen className="h-5 w-5" />
+                                          )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium truncate">{item.title}</p>
+                                          {item.due_date && (
+                                            <p className="text-sm text-muted-foreground">
+                                              Due {formatDate(item.due_date)}
+                                            </p>
+                                          )}
+                                        </div>
+                                        {item.points && (
+                                          <Badge variant="outline" className="shrink-0">{item.points} pts</Badge>
+                                        )}
+                                        {attachments.length > 0 && (
+                                          <Badge variant="secondary" className="shrink-0">{attachments.length} file(s)</Badge>
+                                        )}
+                                        <ChevronDown className={cn(
+                                          "h-4 w-4 shrink-0 transition-transform text-muted-foreground",
+                                          isExpanded && "rotate-180"
+                                        )} />
+                                        {canManage && (
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                                                <MoreVertical className="h-4 w-4" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                              <DropdownMenuItem onClick={() => setEditClassworkDialog({ open: true, item })}>
+                                                <Pencil className="h-4 w-4 mr-2" />
+                                                Edit
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem 
+                                                className="text-destructive"
+                                                onClick={() => setDeleteClassworkDialog({ open: true, item })}
+                                              >
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Delete
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        )}
+                                      </div>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                      <div className="px-3 pb-3 pt-0 border-t bg-muted/30">
+                                        <div className="pt-3 space-y-4">
+                                          {/* Content */}
+                                          {item.content && (
+                                            <div>
+                                              <p className="text-sm font-medium text-muted-foreground mb-1">
+                                                {item.type === 'assignment' ? 'Instructions' : 'Content'}
+                                              </p>
+                                              <p className="text-sm whitespace-pre-wrap">{item.content}</p>
+                                            </div>
+                                          )}
+                                          
+                                          {/* File Grid */}
+                                          {attachments.length > 0 && (
+                                            <div>
+                                              <p className="text-sm font-medium text-muted-foreground mb-2">Attachments</p>
+                                              <FileGrid 
+                                                attachments={attachments} 
+                                                onFileClick={(file) => setPreviewFile(file)} 
+                                              />
+                                            </div>
+                                          )}
+                                          
+                                          {/* View Details Button */}
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-2"
+                                            onClick={() => navigate(
+                                              item.type === 'assignment' 
+                                                ? `/assignment/${item.id}` 
+                                                : `/material/${item.id}`
+                                            )}
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                            View Full Details
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </CollapsibleContent>
+                                  </div>
+                                </Collapsible>
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">No items in this topic</p>
@@ -708,6 +751,13 @@ export default function ClassDetails() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* File Preview Dialog */}
+      <FilePreviewDialog
+        open={!!previewFile}
+        onOpenChange={(open) => !open && setPreviewFile(null)}
+        file={previewFile}
+      />
     </div>
   );
 }

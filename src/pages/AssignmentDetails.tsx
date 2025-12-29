@@ -6,17 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   ArrowLeft, 
   Calendar, 
   FileText, 
-  Clock, 
-  CheckCircle,
-  User
+  CheckCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SubmissionDialog } from '@/components/submission/SubmissionDialog';
+import { FileGrid } from '@/components/classwork/FileGrid';
+import { FilePreviewDialog } from '@/components/ui/file-preview-dialog';
 
 interface Assignment {
   id: string;
@@ -46,6 +45,12 @@ interface SubmissionFile {
   file_type: string | null;
 }
 
+interface PreviewFile {
+  url: string;
+  name: string;
+  type?: string;
+}
+
 export default function AssignmentDetails() {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
@@ -55,6 +60,7 @@ export default function AssignmentDetails() {
   const [submissionFiles, setSubmissionFiles] = useState<SubmissionFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 
   useEffect(() => {
     if (assignmentId) {
@@ -242,18 +248,14 @@ export default function AssignmentDetails() {
               {submissionFiles.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Attached files</p>
-                  {submissionFiles.map((file) => (
-                    <a
-                      key={file.id}
-                      href={file.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 rounded-lg border p-2 text-sm hover:bg-muted/50 transition-colors"
-                    >
-                      <FileText className="h-4 w-4" />
-                      <span className="truncate">{file.file_name || 'File'}</span>
-                    </a>
-                  ))}
+                  <FileGrid 
+                    attachments={submissionFiles.map(f => ({
+                      url: f.file_url,
+                      name: f.file_name || 'File',
+                      type: f.file_type || undefined,
+                    }))}
+                    onFileClick={(file) => setPreviewFile(file)}
+                  />
                 </div>
               )}
 
@@ -284,6 +286,13 @@ export default function AssignmentDetails() {
         assignmentTitle={assignment.title}
         existingSubmission={submission}
         onSubmitted={fetchAssignment}
+      />
+
+      {/* File Preview Dialog */}
+      <FilePreviewDialog
+        open={!!previewFile}
+        onOpenChange={(open) => !open && setPreviewFile(null)}
+        file={previewFile}
       />
     </div>
   );

@@ -11,6 +11,7 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import ClassDetails from "./pages/ClassDetails";
 import AssignmentDetails from "./pages/AssignmentDetails";
+import MaterialDetails from "./pages/MaterialDetails";
 import Profile from "./pages/Profile";
 import AdminPanel from "./pages/AdminPanel";
 import Classwork from "./pages/Classwork";
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/class/:classId" element={<ClassDetails />} />
               <Route path="/assignment/:assignmentId" element={<AssignmentDetails />} />
+              <Route path="/material/:materialId" element={<MaterialDetails />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/classwork" element={<Classwork />} />
