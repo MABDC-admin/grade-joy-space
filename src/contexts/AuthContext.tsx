@@ -41,16 +41,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
     const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
     return data as Profile | null;
   };
 
-  const fetchRoles = async (userId: string) => {
+  const fetchRoles = async (userId: string): Promise<AppRole[]> => {
     const { data } = await supabase
       .from('user_roles')
       .select('role')
@@ -65,9 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id).then(setProfile);
-            fetchRoles(session.user.id).then(setRoles);
+          // Defer Supabase calls with setTimeout to avoid deadlock
+          setTimeout(async () => {
+            const [profileData, rolesData] = await Promise.all([
+              fetchProfile(session.user.id),
+              fetchRoles(session.user.id)
+            ]);
+            setProfile(profileData);
+            setRoles(rolesData);
           }, 0);
         } else {
           setProfile(null);
@@ -76,16 +81,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Initial session check - wait for profile and roles before setting loading to false
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        fetchProfile(session.user.id).then(setProfile);
-        fetchRoles(session.user.id).then(setRoles);
+        const [profileData, rolesData] = await Promise.all([
+          fetchProfile(session.user.id),
+          fetchRoles(session.user.id)
+        ]);
+        setProfile(profileData);
+        setRoles(rolesData);
       }
       setLoading(false);
-    });
+    };
+
+    initializeAuth();
 
     return () => subscription.unsubscribe();
   }, []);
