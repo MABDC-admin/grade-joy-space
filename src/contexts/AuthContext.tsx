@@ -73,10 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ]);
             setProfile(profileData);
             setRoles(rolesData);
+            // Set loading false after data is fetched on auth change
+            setLoading(false);
           }, 0);
         } else {
           setProfile(null);
           setRoles([]);
+          setLoading(false);
         }
       }
     );
