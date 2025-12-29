@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
@@ -77,7 +76,7 @@ export function FilePreviewDialog({ open, onOpenChange, file }: FilePreviewDialo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
             <DialogTitle className="truncate pr-4">{file.name}</DialogTitle>
             <DialogDescription className="sr-only">Preview of {file.name}</DialogDescription>
@@ -88,7 +87,7 @@ export function FilePreviewDialog({ open, onOpenChange, file }: FilePreviewDialo
               Download
             </Button>
           </div>
-        </DialogHeader>
+        </div>
         
         <div className="flex-1 overflow-auto min-h-0 flex items-center justify-center bg-muted/30 rounded-lg">
           {isImage && !imageError && (
