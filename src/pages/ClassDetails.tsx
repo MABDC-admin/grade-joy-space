@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList, Plus } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, BookOpen, Users, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -17,6 +17,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { CreateTopicDialog } from '@/components/classwork/CreateTopicDialog';
+import { CreateClassworkDialog } from '@/components/classwork/CreateClassworkDialog';
 
 interface ClassData {
   id: string;
@@ -296,11 +298,13 @@ export default function ClassDetails() {
         <TabsContent value="classwork" className="mt-6">
           <div className="space-y-4">
             {canManage && (
-              <div className="flex justify-end">
-                <Button className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create
-                </Button>
+              <div className="flex justify-end gap-2">
+                <CreateTopicDialog classId={classData.id} onTopicCreated={fetchClassData} />
+                <CreateClassworkDialog 
+                  classId={classData.id} 
+                  topics={topics.filter(t => t.id !== 'uncategorized')} 
+                  onClassworkCreated={fetchClassData} 
+                />
               </div>
             )}
 
@@ -317,6 +321,7 @@ export default function ClassDetails() {
                           {topic.items.map((item) => (
                             <div
                               key={item.id}
+                              onClick={() => item.type === 'assignment' && navigate(`/assignment/${item.id}`)}
                               className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 cursor-pointer"
                             >
                               <div className={cn(
