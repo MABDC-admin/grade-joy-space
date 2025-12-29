@@ -40,6 +40,8 @@ import { CreateSchoolDialog } from '@/components/admin/CreateSchoolDialog';
 import { CreateTeacherDialog } from '@/components/admin/CreateTeacherDialog';
 import { CreateStudentDialog } from '@/components/admin/CreateStudentDialog';
 import { AssignGradeLevelsDialog } from '@/components/admin/AssignGradeLevelsDialog';
+import { SchoolOverviewDashboard } from '@/components/admin/SchoolOverviewDashboard';
+import { LayoutDashboard } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
@@ -412,8 +414,12 @@ export default function AdminPanel() {
       </div>
 
 
-      <Tabs defaultValue="schools">
+      <Tabs defaultValue="overview">
         <TabsList>
+          <TabsTrigger value="overview" className="gap-2">
+            <LayoutDashboard className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
           <TabsTrigger value="schools" className="gap-2">
             <Building2 className="h-4 w-4" />
             Schools
@@ -431,6 +437,18 @@ export default function AdminPanel() {
             Classes
           </TabsTrigger>
         </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="mt-4">
+          {loading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
+          ) : (
+            <SchoolOverviewDashboard schools={schools} users={users} />
+          )}
+        </TabsContent>
 
         {/* Schools Tab */}
         <TabsContent value="schools" className="mt-4">
