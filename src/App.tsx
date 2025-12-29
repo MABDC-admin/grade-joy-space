@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { SchoolProvider } from "@/contexts/SchoolContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "./pages/Auth";
+import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import ClassDetails from "./pages/ClassDetails";
 import AssignmentDetails from "./pages/AssignmentDetails";
@@ -31,6 +32,7 @@ const App = () => (
             <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/signup" element={<Signup />} />
             
             {/* Protected routes */}
             <Route element={<AppLayout />}>
