@@ -1,4 +1,4 @@
-import { Bell, Grid3X3, Mail, Menu } from 'lucide-react';
+import { Bell, Building2, ChevronDown, Grid3X3, Mail, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSchool } from '@/contexts/SchoolContext';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 
@@ -19,6 +20,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ onMenuClick }: AppHeaderProps) {
   const { user, profile, signOut, isAdmin, isTeacher } = useAuth();
+  const { schools, selectedSchoolId, setSelectedSchoolId, selectedSchool } = useSchool();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -63,6 +65,42 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        {isAdmin && schools.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className="text-primary-foreground hover:bg-primary-foreground/10 gap-2 text-sm"
+              >
+                <Building2 className="h-4 w-4" />
+                <span className="max-w-[120px] truncate">
+                  {selectedSchool?.name || 'All Schools'}
+                </span>
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-popover">
+              <DropdownMenuLabel>Select School</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => setSelectedSchoolId(null)}
+                className={!selectedSchoolId ? 'bg-accent' : ''}
+              >
+                All Schools
+              </DropdownMenuItem>
+              {schools.map((school) => (
+                <DropdownMenuItem
+                  key={school.id}
+                  onClick={() => setSelectedSchoolId(school.id)}
+                  className={selectedSchoolId === school.id ? 'bg-accent' : ''}
+                >
+                  {school.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-primary-foreground/10">
           <Grid3X3 className="h-5 w-5" />
         </Button>
