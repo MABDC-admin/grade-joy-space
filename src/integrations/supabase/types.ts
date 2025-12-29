@@ -109,6 +109,7 @@ export type Database = {
       }
       classes: {
         Row: {
+          banner_url: string | null
           class_code: string
           color: string | null
           created_at: string
@@ -123,6 +124,7 @@ export type Database = {
           subject: string | null
         }
         Insert: {
+          banner_url?: string | null
           class_code?: string
           color?: string | null
           created_at?: string
@@ -137,6 +139,7 @@ export type Database = {
           subject?: string | null
         }
         Update: {
+          banner_url?: string | null
           class_code?: string
           color?: string | null
           created_at?: string
@@ -245,6 +248,30 @@ export type Database = {
           id?: string
           name?: string
           order_index?: number
+        }
+        Relationships: []
+      }
+      notification_reads: {
+        Row: {
+          content_id: string
+          content_type: string
+          id: string
+          read_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          content_type: string
+          id?: string
+          read_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          content_type?: string
+          id?: string
+          read_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
