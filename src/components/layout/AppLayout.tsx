@@ -6,6 +6,7 @@ import { BottomNav } from './BottomNav';
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
+import { ChatButton } from '@/components/chat/ChatButton';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -68,6 +69,7 @@ export function AppLayout() {
       </main>
 
       <BottomNav />
+      <ChatButton />
     </div>
   );
 }
