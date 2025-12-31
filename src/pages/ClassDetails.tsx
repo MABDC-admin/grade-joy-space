@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Copy, FileText, BookOpen, Users, UserPlus, Loader2, MoreVertical, Pencil, Trash2, ChevronDown, ExternalLink, Settings } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, BookOpen, Users, UserPlus, Loader2, MoreVertical, Pencil, Trash2, ChevronDown, ExternalLink, Settings, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import {
   Accordion,
   AccordionContent,
@@ -334,6 +335,55 @@ export default function ClassDetails() {
     }));
   };
 
+  // Drag and drop handler for reordering classwork items
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination || !canManage) return;
+
+    const { source, destination, draggableId } = result;
+    
+    // Only handle reordering within the same topic
+    if (source.droppableId !== destination.droppableId) return;
+    if (source.index === destination.index) return;
+
+    const topicId = source.droppableId;
+    const topicIndex = topics.findIndex(t => t.id === topicId);
+    if (topicIndex === -1) return;
+
+    const topic = topics[topicIndex];
+    const items = [...topic.items];
+    
+    // Reorder items
+    const [movedItem] = items.splice(source.index, 1);
+    items.splice(destination.index, 0, movedItem);
+
+    // Optimistic update
+    const updatedTopics = [...topics];
+    updatedTopics[topicIndex] = { ...topic, items };
+    setTopics(updatedTopics);
+
+    // Update order_index in database
+    try {
+      const updates = items.map((item, index) => ({
+        id: item.id,
+        order_index: index,
+      }));
+
+      for (const update of updates) {
+        await supabase
+          .from('classwork_items')
+          .update({ order_index: update.order_index })
+          .eq('id', update.id);
+      }
+
+      toast.success('Order updated');
+    } catch (error) {
+      console.error('Error updating order:', error);
+      toast.error('Failed to update order');
+      // Rollback on error
+      fetchClassData();
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -444,7 +494,8 @@ export default function ClassDetails() {
             )}
 
             {topics.length > 0 ? (
-              <Accordion type="multiple" className="space-y-2">
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <Accordion type="multiple" className="space-y-2">
                 {topics.map((topic) => {
                   const topicColorClass = topic.color ? `bg-${topic.color}-500` : 'bg-blue-500';
                   return (
@@ -479,120 +530,158 @@ export default function ClassDetails() {
                       </AccordionTrigger>
                       <AccordionContent className="px-4 pb-4">
                         {topic.items.length > 0 ? (
-                          <div className="space-y-2">
-                            {topic.items.map((item) => {
-                              const isExpanded = expandedItems.includes(item.id);
-                              const attachments = getAttachments(item);
-                              
-                              return (
-                                <Collapsible 
-                                  key={item.id} 
-                                  open={isExpanded}
-                                  onOpenChange={() => toggleItemExpanded(item.id)}
-                                >
-                                  <div className="rounded-lg border overflow-hidden">
-                                    <CollapsibleTrigger asChild>
-                                      <div className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/50 cursor-pointer">
-                                        <div 
+                          <Droppable droppableId={topic.id} isDropDisabled={!canManage}>
+                            {(provided, snapshot) => (
+                              <div 
+                                ref={provided.innerRef}
+                                {...provided.droppableProps}
+                                className={cn(
+                                  "space-y-2 rounded-lg transition-colors",
+                                  snapshot.isDraggingOver && "bg-muted/50"
+                                )}
+                              >
+                                {topic.items.map((item, index) => {
+                                  const isExpanded = expandedItems.includes(item.id);
+                                  const attachments = getAttachments(item);
+                                  
+                                  return (
+                                    <Draggable 
+                                      key={item.id} 
+                                      draggableId={item.id} 
+                                      index={index}
+                                      isDragDisabled={!canManage}
+                                    >
+                                      {(provided, snapshot) => (
+                                        <div
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
                                           className={cn(
-                                            "flex h-10 w-10 items-center justify-center rounded-full shrink-0",
-                                            item.type === 'assignment' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
+                                            snapshot.isDragging && "shadow-lg ring-2 ring-primary/20"
                                           )}
                                         >
-                                          {item.type === 'assignment' ? (
-                                            <FileText className="h-5 w-5" />
-                                          ) : (
-                                            <BookOpen className="h-5 w-5" />
-                                          )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="font-medium truncate">{item.title}</p>
-                                          {item.due_date && (
-                                            <p className="text-sm text-muted-foreground">
-                                              Due {formatDate(item.due_date)}
-                                            </p>
-                                          )}
-                                        </div>
-                                        {item.points && (
-                                          <Badge variant="outline" className="shrink-0">{item.points} pts</Badge>
-                                        )}
-                                        {attachments.length > 0 && (
-                                          <Badge variant="secondary" className="shrink-0">{attachments.length} file(s)</Badge>
-                                        )}
-                                        <ChevronDown className={cn(
-                                          "h-4 w-4 shrink-0 transition-transform text-muted-foreground",
-                                          isExpanded && "rotate-180"
-                                        )} />
-                                        {canManage && (
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                                                <MoreVertical className="h-4 w-4" />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                              <DropdownMenuItem onClick={() => setEditClassworkDialog({ open: true, item })}>
-                                                <Pencil className="h-4 w-4 mr-2" />
-                                                Edit
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem 
-                                                className="text-destructive"
-                                                onClick={() => setDeleteClassworkDialog({ open: true, item })}
-                                              >
-                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                Delete
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        )}
-                                      </div>
-                                    </CollapsibleTrigger>
-                                    <CollapsibleContent>
-                                      <div className="px-3 pb-3 pt-0 border-t bg-muted/30">
-                                        <div className="pt-3 space-y-4">
-                                          {/* Content */}
-                                          {item.content && (
-                                            <div>
-                                              <p className="text-sm font-medium text-muted-foreground mb-1">
-                                                {item.type === 'assignment' ? 'Instructions' : 'Content'}
-                                              </p>
-                                              <p className="text-sm whitespace-pre-wrap">{item.content}</p>
-                                            </div>
-                                          )}
-                                          
-                                          {/* File Grid */}
-                                          {attachments.length > 0 && (
-                                            <div>
-                                              <p className="text-sm font-medium text-muted-foreground mb-2">Attachments</p>
-                                              <FileGrid 
-                                                attachments={attachments} 
-                                                onFileClick={(file) => setPreviewFile(file)} 
-                                              />
-                                            </div>
-                                          )}
-                                          
-                                          {/* View Details Button */}
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="gap-2"
-                                            onClick={() => navigate(
-                                              item.type === 'assignment' 
-                                                ? `/assignment/${item.id}` 
-                                                : `/material/${item.id}`
-                                            )}
+                                          <Collapsible 
+                                            open={isExpanded}
+                                            onOpenChange={() => toggleItemExpanded(item.id)}
                                           >
-                                            <ExternalLink className="h-4 w-4" />
-                                            View Full Details
-                                          </Button>
+                                            <div className="rounded-lg border overflow-hidden bg-card">
+                                              <CollapsibleTrigger asChild>
+                                                <div className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/50 cursor-pointer">
+                                                  {/* Drag Handle - Only visible to teachers/admins */}
+                                                  {canManage && (
+                                                    <div 
+                                                      {...provided.dragHandleProps}
+                                                      className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0"
+                                                      onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                      <GripVertical className="h-5 w-5" />
+                                                    </div>
+                                                  )}
+                                                  <div 
+                                                    className={cn(
+                                                      "flex h-10 w-10 items-center justify-center rounded-full shrink-0",
+                                                      item.type === 'assignment' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
+                                                    )}
+                                                  >
+                                                    {item.type === 'assignment' ? (
+                                                      <FileText className="h-5 w-5" />
+                                                    ) : (
+                                                      <BookOpen className="h-5 w-5" />
+                                                    )}
+                                                  </div>
+                                                  <div className="flex-1 min-w-0">
+                                                    <p className="font-medium truncate">{item.title}</p>
+                                                    {item.due_date && (
+                                                      <p className="text-sm text-muted-foreground">
+                                                        Due {formatDate(item.due_date)}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                  {item.points && (
+                                                    <Badge variant="outline" className="shrink-0">{item.points} pts</Badge>
+                                                  )}
+                                                  {attachments.length > 0 && (
+                                                    <Badge variant="secondary" className="shrink-0">{attachments.length} file(s)</Badge>
+                                                  )}
+                                                  <ChevronDown className={cn(
+                                                    "h-4 w-4 shrink-0 transition-transform text-muted-foreground",
+                                                    isExpanded && "rotate-180"
+                                                  )} />
+                                                  {canManage && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                                                          <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                        <DropdownMenuItem onClick={() => setEditClassworkDialog({ open: true, item })}>
+                                                          <Pencil className="h-4 w-4 mr-2" />
+                                                          Edit
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem 
+                                                          className="text-destructive"
+                                                          onClick={() => setDeleteClassworkDialog({ open: true, item })}
+                                                        >
+                                                          <Trash2 className="h-4 w-4 mr-2" />
+                                                          Delete
+                                                        </DropdownMenuItem>
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
+                                                </div>
+                                              </CollapsibleTrigger>
+                                              <CollapsibleContent>
+                                                <div className="px-3 pb-3 pt-0 border-t bg-muted/30">
+                                                  <div className="pt-3 space-y-4">
+                                                    {/* Content */}
+                                                    {item.content && (
+                                                      <div>
+                                                        <p className="text-sm font-medium text-muted-foreground mb-1">
+                                                          {item.type === 'assignment' ? 'Instructions' : 'Content'}
+                                                        </p>
+                                                        <p className="text-sm whitespace-pre-wrap">{item.content}</p>
+                                                      </div>
+                                                    )}
+                                                    
+                                                    {/* File Grid */}
+                                                    {attachments.length > 0 && (
+                                                      <div>
+                                                        <p className="text-sm font-medium text-muted-foreground mb-2">Attachments</p>
+                                                        <FileGrid 
+                                                          attachments={attachments} 
+                                                          onFileClick={(file) => setPreviewFile(file)} 
+                                                        />
+                                                      </div>
+                                                    )}
+                                                    
+                                                    {/* View Details Button */}
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      className="gap-2"
+                                                      onClick={() => navigate(
+                                                        item.type === 'assignment' 
+                                                          ? `/assignment/${item.id}` 
+                                                          : `/material/${item.id}`
+                                                      )}
+                                                    >
+                                                      <ExternalLink className="h-4 w-4" />
+                                                      View Full Details
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                              </CollapsibleContent>
+                                            </div>
+                                          </Collapsible>
                                         </div>
-                                      </div>
-                                    </CollapsibleContent>
-                                  </div>
-                                </Collapsible>
-                              );
-                            })}
-                          </div>
+                                      )}
+                                    </Draggable>
+                                  );
+                                })}
+                                {provided.placeholder}
+                              </div>
+                            )}
+                          </Droppable>
                         ) : (
                           <p className="text-sm text-muted-foreground">No items in this topic</p>
                         )}
@@ -600,7 +689,8 @@ export default function ClassDetails() {
                     </AccordionItem>
                   );
                 })}
-              </Accordion>
+                </Accordion>
+              </DragDropContext>
             ) : (
               <Card className="flex flex-col items-center justify-center py-12">
                 <BookOpen className="h-12 w-12 text-muted-foreground/50" />
