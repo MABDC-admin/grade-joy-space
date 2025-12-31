@@ -10,12 +10,20 @@ import {
   ArrowLeft, 
   Calendar, 
   FileText, 
-  CheckCircle
+  CheckCircle,
+  Paperclip
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SubmissionDialog } from '@/components/submission/SubmissionDialog';
 import { FileGrid } from '@/components/classwork/FileGrid';
 import { FilePreviewDialog } from '@/components/ui/file-preview-dialog';
+
+interface AssignmentAttachment {
+  url: string;
+  name: string;
+  type?: string;
+  file_type?: string;
+}
 
 interface Assignment {
   id: string;
@@ -25,6 +33,7 @@ interface Assignment {
   points: number | null;
   created_at: string;
   class_id: string;
+  attachments: AssignmentAttachment[] | null;
   classes?: { name: string; color: string | null };
   profiles?: { full_name: string | null; avatar_url: string | null };
 }
@@ -84,7 +93,15 @@ export default function AssignmentDetails() {
         .single();
 
       if (assignmentError) throw assignmentError;
-      setAssignment(assignmentData as Assignment);
+      
+      // Parse attachments from JSON
+      const parsedAssignment = {
+        ...assignmentData,
+        attachments: Array.isArray(assignmentData.attachments) 
+          ? (assignmentData.attachments as unknown as AssignmentAttachment[])
+          : null,
+      };
+      setAssignment(parsedAssignment as Assignment);
 
       // Fetch submission for this student
       const { data: submissionData } = await supabase
@@ -224,11 +241,29 @@ export default function AssignmentDetails() {
             <CardHeader>
               <CardTitle className="text-base">Instructions</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               {assignment.content ? (
                 <p className="whitespace-pre-wrap">{assignment.content}</p>
               ) : (
                 <p className="text-muted-foreground">No instructions provided</p>
+              )}
+              
+              {/* Assignment Attachments */}
+              {assignment.attachments && assignment.attachments.length > 0 && (
+                <div className="space-y-2 pt-4 border-t">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Paperclip className="h-4 w-4" />
+                    <span>Attachments ({assignment.attachments.length})</span>
+                  </div>
+                  <FileGrid 
+                    attachments={assignment.attachments.map(att => ({
+                      url: att.url,
+                      name: att.name,
+                      type: att.type || att.file_type,
+                    }))}
+                    onFileClick={(file) => setPreviewFile(file)}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
