@@ -92,12 +92,22 @@ export default function MaterialDetails() {
     type: att.type || att.file_type,
   }));
 
+  const handleBack = () => {
+    // Check if there's history to go back to
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      // Fallback: navigate to the class page
+      navigate(material?.class_id ? `/class/${material.class_id}` : '/dashboard');
+    }
+  };
+
   return (
     <div className="animate-fade-in mx-auto max-w-3xl space-y-6">
       {/* Back button */}
-      <Button variant="ghost" onClick={() => navigate(-1)} className="gap-2">
+      <Button variant="ghost" onClick={handleBack} className="gap-2">
         <ArrowLeft className="h-4 w-4" />
-        Back
+        Back to Class
       </Button>
 
       {/* Material header */}
