@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ClassCard } from '@/components/dashboard/ClassCard';
 import { CreateClassDialog } from '@/components/dashboard/CreateClassDialog';
 import { JoinClassDialog } from '@/components/dashboard/JoinClassDialog';
@@ -8,13 +8,13 @@ import { useSchool } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { BookOpen, Calendar, Clock, ExternalLink, Bell, Megaphone, Pencil, GraduationCap } from 'lucide-react';
+import { BookOpen, Calendar, Clock, ExternalLink, Bell, Megaphone, Pencil, GraduationCap, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useUnreadContent } from '@/hooks/useUnreadContent';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, isAfter, subDays } from 'date-fns';
 
 interface ClassData {
   id: string;
@@ -41,6 +41,16 @@ interface UpcomingItem {
   status?: string;
 }
 
+interface NewThisWeekItem {
+  id: string;
+  title: string;
+  type: string;
+  created_at: string;
+  class_name: string;
+  class_id: string;
+  due_date: string | null;
+}
+
 interface Announcement {
   id: string;
   content: string;
@@ -58,8 +68,10 @@ export default function Dashboard() {
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [newThisWeek, setNewThisWeek] = useState<NewThisWeekItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [enrolledClassIds, setEnrolledClassIds] = useState<string[]>([]);
 
   const fetchClassCounts = async (classIds: string[]): Promise<Map<string, { students: number; assignments: number }>> => {
     const countsMap = new Map<string, { students: number; assignments: number }>();
@@ -259,6 +271,8 @@ export default function Dashboard() {
         const classIds = memberClasses?.map(c => c.class_id) || [];
 
         if (classIds.length > 0) {
+          setEnrolledClassIds(classIds);
+          
           let query = supabase
             .from('classes')
             .select('*')
@@ -282,10 +296,13 @@ export default function Dashboard() {
 
           await fetchUpcomingForStudent(classIds);
           await fetchAnnouncements(classIds);
+          await fetchNewThisWeek(classIds);
         } else {
           setClasses([]);
           setUpcomingItems([]);
           setAnnouncements([]);
+          setNewThisWeek([]);
+          setEnrolledClassIds([]);
         }
         return;
       }
@@ -350,9 +367,103 @@ export default function Dashboard() {
     }
   };
 
+  const fetchNewThisWeek = useCallback(async (classIds: string[]) => {
+    if (classIds.length === 0) {
+      setNewThisWeek([]);
+      return;
+    }
+
+    const oneWeekAgo = subDays(new Date(), 7).toISOString();
+
+    try {
+      const { data: items } = await supabase
+        .from('classwork_items')
+        .select(`
+          id,
+          title,
+          type,
+          created_at,
+          due_date,
+          class_id,
+          classes (name)
+        `)
+        .in('class_id', classIds)
+        .gte('created_at', oneWeekAgo)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (items) {
+        setNewThisWeek(
+          items.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            type: item.type,
+            created_at: item.created_at,
+            class_name: item.classes?.name || '',
+            class_id: item.class_id,
+            due_date: item.due_date,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('Error fetching new this week:', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchClasses();
   }, [user, profile, isAdmin, isTeacher, selectedSchoolId]);
+
+  // Real-time subscription for new classwork items (student only)
+  useEffect(() => {
+    if (!isStudent || enrolledClassIds.length === 0) return;
+
+    const channel = supabase
+      .channel('new-classwork-dashboard')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'classwork_items',
+        },
+        async (payload) => {
+          const newItem = payload.new as any;
+          
+          // Check if this item belongs to one of the student's classes
+          if (!enrolledClassIds.includes(newItem.class_id)) return;
+
+          // Fetch class name
+          const { data: classData } = await supabase
+            .from('classes')
+            .select('name')
+            .eq('id', newItem.class_id)
+            .maybeSingle();
+
+          const newClassworkItem: NewThisWeekItem = {
+            id: newItem.id,
+            title: newItem.title,
+            type: newItem.type,
+            created_at: newItem.created_at,
+            class_name: classData?.name || '',
+            class_id: newItem.class_id,
+            due_date: newItem.due_date,
+          };
+
+          setNewThisWeek((prev) => [newClassworkItem, ...prev].slice(0, 10));
+          
+          // Also refresh upcoming if it's an assignment
+          if (newItem.type === 'assignment') {
+            fetchUpcomingForStudent(enrolledClassIds);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isStudent, enrolledClassIds]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'No due date';
@@ -450,6 +561,65 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">New Updates</p>
               </Card>
             </div>
+
+            {/* New This Week */}
+            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  New This Week
+                  {newThisWeek.length > 0 && (
+                    <Badge variant="secondary" className="ml-auto bg-primary/10 text-primary">
+                      {newThisWeek.length}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-14" />)}
+                  </div>
+                ) : newThisWeek.length > 0 ? (
+                  newThisWeek.slice(0, 5).map((item) => {
+                    const isNew = isAfter(new Date(item.created_at), subDays(new Date(), 1));
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => navigate(item.type === 'assignment' ? `/assignment/${item.id}` : `/material/${item.id}`)}
+                        className="w-full flex items-start justify-between rounded-lg border bg-background p-3 transition-colors hover:bg-muted/50 text-left group"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-medium group-hover:text-primary transition-colors">
+                              {item.title}
+                            </p>
+                            {isNew && (
+                              <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 animate-pulse">
+                                NEW
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {item.type === 'assignment' ? 'Assignment' : 'Material'}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">{item.class_name}</span>
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                          {format(new Date(item.created_at), 'MMM d')}
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground py-4">
+                    No new content this week
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Upcoming Assignments */}
             <Card>
