@@ -177,7 +177,7 @@ export default function ClassDetails() {
       if (uncategorizedItems.length > 0) {
         topicsWithItems.unshift({
           id: 'uncategorized',
-          name: 'Uncategorized',
+          name: 'Ebook',
           order_index: -1,
           class_id: classId,
           created_at: new Date().toISOString(),
