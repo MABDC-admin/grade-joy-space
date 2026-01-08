@@ -55,12 +55,13 @@ export function useRobustFileUpload({ bucket, folder, onProgress }: UseRobustFil
 
       onProgress?.(10);
 
-      // Upload the file
+      // Upload the file with explicit content type
       const { error: uploadError } = await supabase.storage
         .from(bucket)
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false,
+          contentType: file.type || 'application/octet-stream',
         });
 
       if (uploadError) {
@@ -84,23 +85,27 @@ export function useRobustFileUpload({ bucket, folder, onProgress }: UseRobustFil
 
       onProgress?.(70);
 
-      // Verify the public URL is accessible
-      const isPublicAccessible = await verifyUrl(finalUrl);
+      // Only verify URL for images (PDFs and other files don't need immediate verification)
+      const isImageFile = file.type?.startsWith('image/');
+      
+      if (isImageFile) {
+        const isPublicAccessible = await verifyUrl(finalUrl);
 
-      if (!isPublicAccessible) {
-        console.log('Public URL not accessible, trying signed URL...');
-        
-        // Try signed URL as fallback
-        const signedUrl = await getSignedUrl(filePath);
-        
-        if (signedUrl) {
-          const isSignedAccessible = await verifyUrl(signedUrl);
-          if (isSignedAccessible) {
-            finalUrl = signedUrl;
-            console.log('Using signed URL instead');
-          } else {
-            console.warn('Neither public nor signed URL is accessible');
-            // Still return the public URL - it might work later
+        if (!isPublicAccessible) {
+          console.log('Public URL not accessible, trying signed URL...');
+          
+          // Try signed URL as fallback
+          const signedUrl = await getSignedUrl(filePath);
+          
+          if (signedUrl) {
+            const isSignedAccessible = await verifyUrl(signedUrl);
+            if (isSignedAccessible) {
+              finalUrl = signedUrl;
+              console.log('Using signed URL instead');
+            } else {
+              console.warn('Neither public nor signed URL is accessible');
+              // Still return the public URL - it might work later
+            }
           }
         }
       }

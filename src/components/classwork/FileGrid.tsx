@@ -24,7 +24,7 @@ export function FileGrid({ attachments, onFileClick }: FileGridProps) {
       return null; // Will show thumbnail
     }
     if (type === 'application/pdf' || name.endsWith('.pdf')) {
-      return <FileText className="h-8 w-8 text-destructive" />;
+      return 'pdf'; // Special handling for PDF
     }
     if (type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(name)) {
       return <Video className="h-8 w-8 text-primary" />;
@@ -33,6 +33,12 @@ export function FileGrid({ attachments, onFileClick }: FileGridProps) {
       return <Music className="h-8 w-8 text-primary" />;
     }
     return <File className="h-8 w-8 text-muted-foreground" />;
+  };
+
+  const isPdf = (file: FileAttachment) => {
+    const type = file.type?.toLowerCase() || '';
+    const name = file.name?.toLowerCase() || '';
+    return type === 'application/pdf' || name.endsWith('.pdf');
   };
 
   const isImage = (file: FileAttachment) => {
@@ -48,6 +54,7 @@ export function FileGrid({ attachments, onFileClick }: FileGridProps) {
           key={`${file.url}-${index}`} 
           file={file} 
           isImage={isImage(file)}
+          isPdf={isPdf(file)}
           icon={getFileIcon(file)}
           onClick={() => onFileClick(file)} 
         />
@@ -59,11 +66,12 @@ export function FileGrid({ attachments, onFileClick }: FileGridProps) {
 interface FileThumbnailProps {
   file: FileAttachment;
   isImage: boolean;
+  isPdf: boolean;
   icon: React.ReactNode;
   onClick: () => void;
 }
 
-function FileThumbnail({ file, isImage, icon, onClick }: FileThumbnailProps) {
+function FileThumbnail({ file, isImage, isPdf, icon, onClick }: FileThumbnailProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -96,6 +104,16 @@ function FileThumbnail({ file, isImage, icon, onClick }: FileThumbnailProps) {
   };
 
   const imageUrl = `${getCleanUrl(file.url)}${retryCount > 0 ? `?retry=${retryCount}` : ''}`;
+
+  // Get file name without extension for display
+  const getDisplayName = (name: string) => {
+    const parts = name.split('.');
+    if (parts.length > 1) {
+      parts.pop();
+      return parts.join('.');
+    }
+    return name;
+  };
 
   return (
     <button
@@ -135,6 +153,19 @@ function FileThumbnail({ file, isImage, icon, onClick }: FileThumbnailProps) {
             <RefreshCw className="h-3 w-3" />
             Retry
           </button>
+        </div>
+      ) : isPdf ? (
+        // Enhanced PDF thumbnail
+        <div className="aspect-square flex flex-col items-center justify-center rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 gap-2">
+          <div className="relative">
+            <FileText className="h-10 w-10 text-red-500" />
+            <span className="absolute -bottom-1 -right-1 text-[8px] font-bold text-white bg-red-500 px-1 rounded">
+              PDF
+            </span>
+          </div>
+          <span className="text-[10px] text-red-600 dark:text-red-400 font-medium text-center px-1 truncate max-w-full">
+            {getDisplayName(file.name).slice(0, 12)}
+          </span>
         </div>
       ) : (
         <div className="aspect-square flex items-center justify-center rounded-md bg-muted">

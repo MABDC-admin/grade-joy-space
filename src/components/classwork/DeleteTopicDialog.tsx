@@ -58,7 +58,7 @@ export function DeleteTopicDialog({ open, onOpenChange, topic, onTopicDeleted }:
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Topic</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete "{topic.name}"? Items in this topic will be moved to Uncategorized.
+            Are you sure you want to delete "{topic.name}"? Items in this topic will be moved to Ebook.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
