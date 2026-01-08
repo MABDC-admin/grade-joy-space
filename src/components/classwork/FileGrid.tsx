@@ -1,7 +1,9 @@
 import { FileText, Image as ImageIcon, Video, Music, File, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 
+// Lazy load PDF thumbnail to avoid loading react-pdf unless needed
+const PdfThumbnail = lazy(() => import('./PdfThumbnail').then(m => ({ default: m.PdfThumbnail })));
 interface FileAttachment {
   url: string;
   name: string;
@@ -155,18 +157,14 @@ function FileThumbnail({ file, isImage, isPdf, icon, onClick }: FileThumbnailPro
           </button>
         </div>
       ) : isPdf ? (
-        // Enhanced PDF thumbnail
-        <div className="aspect-square flex flex-col items-center justify-center rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 gap-2">
-          <div className="relative">
-            <FileText className="h-10 w-10 text-red-500" />
-            <span className="absolute -bottom-1 -right-1 text-[8px] font-bold text-white bg-red-500 px-1 rounded">
-              PDF
-            </span>
+        // PDF thumbnail with first page preview
+        <Suspense fallback={
+          <div className="aspect-square flex flex-col items-center justify-center rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 gap-2">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
           </div>
-          <span className="text-[10px] text-red-600 dark:text-red-400 font-medium text-center px-1 truncate max-w-full">
-            {getDisplayName(file.name).slice(0, 12)}
-          </span>
-        </div>
+        }>
+          <PdfThumbnail url={getCleanUrl(file.url)} name={file.name} />
+        </Suspense>
       ) : (
         <div className="aspect-square flex items-center justify-center rounded-md bg-muted">
           {icon}
